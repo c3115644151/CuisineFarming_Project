@@ -1,0 +1,35 @@
+name: CuisineFarming
+version: 1.0-SNAPSHOT
+main: com.example.cuisinefarming.CuisineFarming
+api-version: 1.21
+authors: [cy311]
+description: A farming and cooking plugin with soil fertility and season integration.
+depend:
+  - EarthSpirit
+  - BiomeGifts
+softdepend:
+  - RealisticSeasons
+commands:
+  getorganic:
+    description: 获取有机肥料
+    usage: /getorganic
+    permission: cuisinefarming.get
+  getchemical:
+    description: 获取高效化肥
+    usage: /getchemical
+    permission: cuisinefarming.get
+  getmonocle:
+    description: 获取农夫单片镜
+    usage: /getmonocle
+    permission: cuisinefarming.get
+  getdebugtool:
+    description: 获取服务器调试工具
+    usage: /getdebugtool
+    permission: cuisinefarming.debug
+permissions:
+  cuisinefarming.get:
+    description: 允许获取农耕物品
+    default: op
+  cuisinefarming.debug:
+    description: 允许使用调试工具
+    default: op
