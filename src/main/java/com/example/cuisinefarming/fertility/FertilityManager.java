@@ -17,8 +17,6 @@ import java.util.HashMap;
 import java.util.Map;
 
 import org.bukkit.block.data.Ageable;
-import org.bukkit.Particle;
-import java.util.Random;
 
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
@@ -27,7 +25,6 @@ public class FertilityManager implements Listener {
 
     private final Map<Chunk, ChunkFertilityData> cache = new HashMap<>();
     private final NamespacedKey pdcKey;
-    private final Random random = new Random();
     
     // Constants
     private static final int MAX_FERTILITY_BASE = 100;
@@ -41,13 +38,6 @@ public class FertilityManager implements Listener {
     
     private static final double K_BASE = 0.002;
     private static final double K_BONUS_PER_CONC = 0.0001; // 100 conc -> +0.01 (5x base)
-    
-    // Growth Constants (Benchmarks)
-    // Vanilla: 3 random ticks per section (16x16x16 = 4096 blocks) per tick (Default GameRule)
-    private static final double VANILLA_RANDOM_TICK_PROB = 3.0 / 4096.0; // ~0.000732
-    
-    // Task Interval: 20 ticks (1 second)
-    private static final int TASK_INTERVAL_TICKS = 20;
     
     /*
      * [机制量化说明 - Native Mechanics Quantification (Revised)]
@@ -354,110 +344,90 @@ public class FertilityManager implements Listener {
     }
 
     /**
-     * Public API to get total efficiency for a crop location.
-     * This sums up all factors: Base Fertility + BiomeGifts + EarthSpirit.
+     * Data object to hold efficiency breakdown.
      */
-    public double calculateTotalEfficiency(Block soil) {
-        if (soil.getType() != Material.FARMLAND) return 1.0;
+    public static class EfficiencyBreakdown {
+        public double baseEfficiency; // 1.0 + fertility bonus
+        public double fertilityBonus; // fertility * multiplier
+        public double biomeBonus;
+        public double spiritBonus;
+        public double totalEfficiency;
+        
+        public EfficiencyBreakdown(double baseEfficiency, double fertilityBonus, double biomeBonus, double spiritBonus) {
+            this.baseEfficiency = baseEfficiency;
+            this.fertilityBonus = fertilityBonus;
+            this.biomeBonus = biomeBonus;
+            this.spiritBonus = spiritBonus;
+            this.totalEfficiency = baseEfficiency + biomeBonus + spiritBonus;
+        }
+    }
+
+    /**
+     * Get detailed efficiency breakdown for debugging.
+     */
+    public EfficiencyBreakdown calculateEfficiencyBreakdown(Block soil) {
+        if (soil.getType() != Material.FARMLAND) {
+            return new EfficiencyBreakdown(1.0, 0.0, 0.0, 0.0);
+        }
         
         ChunkFertilityData.Entry entry = getEntry(soil);
         long now = System.currentTimeMillis();
         int fertility = (entry != null) ? calculateRecovery(entry, soil, now) : INITIAL_FERTILITY;
         
         // Base Efficiency from Fertility: 1.0 + (Fertility * 0.005)
-        // Range: 0.5 (at -100) to 1.5 (at 100)
         int effectiveFertility = Math.min(100, Math.max(-100, fertility));
-        double baseEfficiency = 1.0 + (effectiveFertility * 0.005);
+        double fertilityBonus = effectiveFertility * 0.005;
+        double baseEfficiency = 1.0 + fertilityBonus;
         
-        double externalBonus = getExternalGrowthBonus(soil);
+        double biomeBonus = 0.0;
+        double spiritBonus = 0.0;
         
-        // Total Efficiency
-        return baseEfficiency + externalBonus;
+        try {
+            if (org.bukkit.Bukkit.getPluginManager().isPluginEnabled("BiomeGifts")) {
+                org.bukkit.plugin.Plugin biomePlugin = org.bukkit.Bukkit.getPluginManager().getPlugin("BiomeGifts");
+                Block cropBlock = soil.getRelative(0, 1, 0);
+                if (cropBlock.getBlockData() instanceof Ageable) {
+                     biomeBonus = getBiomeGiftsBonus(biomePlugin, cropBlock);
+                }
+            }
+            
+            if (org.bukkit.Bukkit.getPluginManager().isPluginEnabled("EarthSpirit")) {
+                spiritBonus = getEarthSpiritBonus(soil.getLocation());
+            }
+        } catch (Exception e) {
+            // Suppress
+        }
+        
+        return new EfficiencyBreakdown(baseEfficiency, fertilityBonus, biomeBonus, spiritBonus);
     }
 
     /**
-     * Active Growth Tick: Called by GrowthTask.
-     * Randomly ticks crops on fertile land to simulate "extra random ticks".
-     * Uses dynamic calculation of 'g' and 'p' to match vanilla mechanics per crop.
+     * Public API to get total efficiency for a crop location.
+     * This sums up all factors: Base Fertility + BiomeGifts + EarthSpirit.
+     */
+    public double calculateTotalEfficiency(Block soil) {
+        EfficiencyBreakdown breakdown = calculateEfficiencyBreakdown(soil);
+        return breakdown.totalEfficiency;
+    }
+
+    /**
+     * Get fertility drop bonus for external plugins (e.g. BiomeGifts).
+     * Bonus = (Fertility - 100) * 0.2% per point.
+     */
+    public double getFertilityDropBonus(Block soil) {
+        int fertility = calculateCurrentFertility(soil);
+        if (fertility > 100) {
+            return (fertility - 100) * 0.002;
+        }
+        return 0.0;
+    }
+
+    /**
+     * Active Growth Tick: Deprecated.
+     * Acceleration is now handled via Event-Based logic in FarmingListener to support high tick rates.
      */
     public void performGrowthTick() {
-        long now = System.currentTimeMillis();
-        
-        // Iterate over all loaded chunks with fertility data
-        for (Map.Entry<Chunk, ChunkFertilityData> chunkEntry : cache.entrySet()) {
-            Chunk chunk = chunkEntry.getKey();
-            if (!chunk.isLoaded()) continue;
-            
-            ChunkFertilityData data = chunkEntry.getValue();
-            
-            // Iterate over all known fertile blocks in this chunk
-            for (Map.Entry<Integer, ChunkFertilityData.Entry> entry : data.getAllEntries().entrySet()) {
-                ChunkFertilityData.Entry fertEntry = entry.getValue();
-                
-                // Only process if it has some positive attribute (fertility or concentration)
-                // OR if we need to process slowdown (but performGrowthTick is primarily for acceleration)
-                // Actually, slowdown is passive (event cancellation). Acceleration is active.
-                // So here we only care about acceleration (Efficiency > 1.0).
-                
-                if (fertEntry.baseFertility <= 0 && fertEntry.fertilizerConcentration <= 0) {
-                     // Even if fertility is low, external bonuses might boost it above 1.0
-                     // So we should check total efficiency, but to save perf, maybe simple check first?
-                     // Let's proceed to check total efficiency properly.
-                }
-
-                int key = entry.getKey();
-                int x = ChunkFertilityData.unpackX(key);
-                int y = ChunkFertilityData.unpackY(key);
-                int z = ChunkFertilityData.unpackZ(key);
-                
-                Block soil = chunk.getBlock(x, y, z);
-                if (soil.getType() != Material.FARMLAND) continue;
-
-                // Use the unified calculation method
-                double totalEfficiency = calculateTotalEfficiency(soil);
-
-                // Only process ACCELERATION here (totalEfficiency > 1.0)
-                if (totalEfficiency <= 1.0) continue;
-
-                // --- DYNAMIC VANILLA CALCULATION ---
-                Block cropBlock = soil.getRelative(0, 1, 0);
-                if (!(cropBlock.getBlockData() instanceof Ageable)) continue; // Not a crop
-                
-                // Calculate 'g' points for this specific crop layout
-                float g = calculateGrowthPoints(cropBlock, soil);
-                
-                // Calculate Vanilla Probability 'p'
-                // Formula: 1 / (floor(25/g) + 1)
-                double p = 1.0 / (Math.floor(25.0 / g) + 1.0);
-                
-                // Calculate Task Probability
-                // We want to add (Efficiency - 1.0) worth of vanilla speed.
-                // Vanilla speed per tick = VANILLA_RANDOM_TICK_PROB * p
-                // Task runs every TASK_INTERVAL_TICKS
-                // Vanilla events in interval = TASK_INTERVAL_TICKS * VANILLA_RANDOM_TICK_PROB * p
-                
-                double vanillaEventsPerInterval = TASK_INTERVAL_TICKS * VANILLA_RANDOM_TICK_PROB * p;
-                
-                // Extra events needed = vanillaEventsPerInterval * (totalEfficiency - 1.0)
-                double extraChance = vanillaEventsPerInterval * (totalEfficiency - 1.0);
-
-                if (extraChance > 0 && random.nextDouble() < extraChance) {
-                    Ageable ageable = (Ageable) cropBlock.getBlockData();
-                    // Vanilla Requirement: Light Level >= 9
-                    if (cropBlock.getLightLevel() < 9) continue;
-
-                    if (ageable.getAge() < ageable.getMaximumAge()) {
-                        ageable.setAge(ageable.getAge() + 1);
-                        cropBlock.setBlockData(ageable);
-                        
-                        cropBlock.getWorld().spawnParticle(Particle.HEART, cropBlock.getLocation().add(0.5, 0.5, 0.5), 3);
-                        
-                        // Consume Fertility
-                        consumeFertility(soil, 2);
-                    }
-                }
-            }
-        }
+        // Logic moved to FarmingListener.onCropGrow (Efficiency > 1.0 handling)
     }
     
     /**
@@ -530,35 +500,6 @@ public class FertilityManager implements Listener {
         return block.getType() == type;
     }
     
-    /**
-     * Helper to calculate external growth bonuses (BiomeGifts, EarthSpirit).
-     * Returns a value to be ADDED to efficiency (e.g. +0.3 for 30%).
-     */
-    private double getExternalGrowthBonus(Block soil) {
-        double bonus = 0.0;
-        
-        try {
-            // 1. BiomeGifts Integration
-            if (org.bukkit.Bukkit.getPluginManager().isPluginEnabled("BiomeGifts")) {
-                org.bukkit.plugin.Plugin biomePlugin = org.bukkit.Bukkit.getPluginManager().getPlugin("BiomeGifts");
-                Block cropBlock = soil.getRelative(0, 1, 0);
-                if (cropBlock.getBlockData() instanceof Ageable) {
-                     bonus += getBiomeGiftsBonus(biomePlugin, cropBlock);
-                }
-            }
-            
-            // 2. EarthSpirit Integration
-            if (org.bukkit.Bukkit.getPluginManager().isPluginEnabled("EarthSpirit")) {
-                bonus += getEarthSpiritBonus(soil.getLocation());
-            }
-            
-        } catch (Exception e) {
-            // Suppress
-        }
-        
-        return bonus;
-    }
-
     private double getBiomeGiftsBonus(org.bukkit.plugin.Plugin plugin, Block cropBlock) {
         try {
             Method getConfigManager = plugin.getClass().getMethod("getConfigManager");

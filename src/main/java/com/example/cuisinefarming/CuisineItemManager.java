@@ -29,6 +29,9 @@ public class CuisineItemManager {
         // 农具
         registerItem("FARMER_MONOCLE", Material.LEATHER_HELMET, "农夫单片镜", 20003, "§7戴上它，看透土地的本质。", "§e佩戴在头上时，看向耕地可显示肥力。");
         
+        // 机器 (工作方块)
+        registerItem("SEED_ANALYZER", Material.IRON_BLOCK, "种子分析仪", 20004, "§7用于鉴定未知种子的基因数据。", "§e放置后右键打开工作界面。");
+
         plugin.getLogger().info("Registered " + customItems.size() + " cuisine items.");
     }
 

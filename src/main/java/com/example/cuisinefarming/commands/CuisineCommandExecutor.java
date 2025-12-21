@@ -48,6 +48,10 @@ public class CuisineCommandExecutor implements CommandExecutor {
                 itemKey = "FARMER_MONOCLE";
                 successMessage = "§a成功获取 农夫单片镜！";
                 break;
+            case "getanalyzer":
+                itemKey = "SEED_ANALYZER";
+                successMessage = "§a成功获取 种子分析仪！";
+                break;
             default:
                 return false;
         }

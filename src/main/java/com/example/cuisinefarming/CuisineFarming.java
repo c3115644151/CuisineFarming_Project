@@ -1,26 +1,35 @@
 package com.example.cuisinefarming;
 
 import com.example.cuisinefarming.fertility.FertilityManager;
+import com.example.cuisinefarming.listeners.DebugListener;
 import com.example.cuisinefarming.listeners.FarmingListener;
+import com.example.cuisinefarming.listeners.SeedAnalyzerListener;
 import com.example.cuisinefarming.commands.CuisineCommandExecutor;
 import org.bukkit.plugin.java.JavaPlugin;
+
+import com.example.cuisinefarming.genetics.GeneticsManager;
 
 public class CuisineFarming extends JavaPlugin {
 
     private static CuisineFarming instance;
     private FertilityManager fertilityManager;
     private CuisineItemManager itemManager;
+    private GeneticsManager geneticsManager;
+    private FarmingListener farmingListener;
+    // private MonocleTask monocleTask;
 
     @Override
     public void onEnable() {
         instance = this;
         
         // Initialize Managers
-        this.itemManager = new CuisineItemManager(this);
         this.fertilityManager = new FertilityManager(this);
-        
+        this.itemManager = new CuisineItemManager(this);
+        this.geneticsManager = new GeneticsManager(this); // Initialize here
+
         // Register Listeners
-        new FarmingListener(this);
+        this.farmingListener = new FarmingListener(this);
+        getServer().getPluginManager().registerEvents(new SeedAnalyzerListener(this), this);
         
         // Register Commands
         CuisineCommandExecutor commandExecutor = new CuisineCommandExecutor(this);
@@ -59,5 +68,13 @@ public class CuisineFarming extends JavaPlugin {
     
     public CuisineItemManager getItemManager() {
         return itemManager;
+    }
+
+    public GeneticsManager getGeneticsManager() {
+        return geneticsManager;
+    }
+
+    public FarmingListener getFarmingListener() {
+        return farmingListener;
     }
 }
