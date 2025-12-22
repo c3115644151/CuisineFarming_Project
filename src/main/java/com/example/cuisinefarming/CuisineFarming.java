@@ -1,7 +1,6 @@
 package com.example.cuisinefarming;
 
 import com.example.cuisinefarming.fertility.FertilityManager;
-import com.example.cuisinefarming.listeners.DebugListener;
 import com.example.cuisinefarming.listeners.FarmingListener;
 import com.example.cuisinefarming.listeners.SeedAnalyzerListener;
 import com.example.cuisinefarming.commands.CuisineCommandExecutor;
@@ -15,6 +14,7 @@ public class CuisineFarming extends JavaPlugin {
     private FertilityManager fertilityManager;
     private CuisineItemManager itemManager;
     private GeneticsManager geneticsManager;
+    private com.example.cuisinefarming.pollination.PollinationManager pollinationManager;
     private FarmingListener farmingListener;
     // private MonocleTask monocleTask;
 
@@ -26,9 +26,11 @@ public class CuisineFarming extends JavaPlugin {
         this.fertilityManager = new FertilityManager(this);
         this.itemManager = new CuisineItemManager(this);
         this.geneticsManager = new GeneticsManager(this); // Initialize here
+        this.pollinationManager = new com.example.cuisinefarming.pollination.PollinationManager(this);
 
         // Register Listeners
         this.farmingListener = new FarmingListener(this);
+        new com.example.cuisinefarming.listeners.PollinationListener(this, pollinationManager);
         getServer().getPluginManager().registerEvents(new SeedAnalyzerListener(this), this);
         
         // Register Commands
@@ -36,6 +38,7 @@ public class CuisineFarming extends JavaPlugin {
         if (getCommand("getorganic") != null) getCommand("getorganic").setExecutor(commandExecutor);
         if (getCommand("getchemical") != null) getCommand("getchemical").setExecutor(commandExecutor);
         if (getCommand("getmonocle") != null) getCommand("getmonocle").setExecutor(commandExecutor);
+        if (getCommand("getanalyzer") != null) getCommand("getanalyzer").setExecutor(commandExecutor);
         
         // Debug Command
         if (getCommand("getdebugtool") != null) getCommand("getdebugtool").setExecutor(new com.example.cuisinefarming.commands.DebugCommandExecutor(this));

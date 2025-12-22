@@ -29,31 +29,92 @@
     *   **粒子**: 肥力耗尽冒灰烟，施肥成功飘绿星。
     *   **农夫单片镜**: 佩戴特定道具时，ActionBar 显示精准数值 (🌱 肥力: 120/100)。
 
-### 2.2 种植与选种体系 (Farming & Genetics)
-**核心需求**: 引入孟德尔式遗传变异与温室微气候模拟，打破作物同质化。
+### 2.2 种植与选种体系 (Farming & Genetics) - [重构版]
+**核心目标**: 抛弃原有的简单数值叠加，构建基于“孟德尔遗传学”与“表观遗传学”的深度农业系统。将“获得种子”转化为“维持种质资源”的动态经营玩法。
 
-#### A. 品质星级 (Star Level)
-*   **星级 (1-5星)**: 决定作物作为食材的基础品质。
-*   **决定因素**: 肥力、时令、温室、种子基因。
+#### 2.2.1 核心架构：基因型与表型 (Genotype vs. Phenotype)
+**现状**: 种子直接存储最终属性 (e.g., `Speed: 1.5x`)，逻辑简单但缺乏深度。
+**改动**: 引入**双层数据结构**。
 
-#### B. 基因与选种 (Genetics)
-*   **种子属性**: 
-    *   **基础生长速度**: 基因决定的快慢。
-    *   **产量**: 单次收割的掉落量。
-    *   **温度适应性**: 适宜生长的温度区间 (e.g. 10°C ~ 30°C)。
-*   **鉴定**: 普通种子显示为“未鉴定”，放入鉴定机/使用放大镜揭示基因数据。
-*   **提纯**: 优秀环境下种植 (温室+满肥力) -> 积累“生长势” -> 产出更高星级种子。
-*   **杂交**:
-    *   使用 **授粉架** 连接两块耕地。
-    *   父本A + 父本B -> 中间产出 **新芽** (可能是高星父本，也可能是全新物种，如【金玉根】，也可能是失败品)。
+1.  **基因型 (Genotype - 存储层)**:
+    *   **定义**: 作物真实的遗传信息，存储在 `PDC` (区块) 或 `ItemMeta` (种子物品) 中。
+    *   **结构**: 采用**双等位基因 (Diploid)** 系统。每个性状由一对基因控制。
+        *   *示例*: `Growth_Gene: [Dominant, Recessive]` (杂合子)。
+    *   **基因等级**:
+        *   `Wild (W)`: 野生型，基础值 (Value=1)。
+        *   **`Domestic (D)`**: 驯化型，高产但脆弱 (Value=2)。
+        *   **`Special (S)`**: 突变型，拥有特殊能力 (Value=4)。
 
-#### C. 温室与微气候 (Greenhouse & Microclimate)
-*   **温度计算**: `最终温度 = 环境气温(季节/群系) + 人为修正`。
-*   **温室判定**: 上方有玻璃遮挡 -> 锁温 (免疫极端天气) + 聚热 (+5°C)。
-*   **人为控温**:
-    *   **升温**: 暖石/岩浆块 (+10°C), 灵火篝火 (+20°C)。
-    *   **降温**: 蓝冰/干冰 (-10°C)。
-*   **玩法**: 在冬天搭建温室并放置热源，模拟热带环境种植西瓜。
+2.  **表型 (Phenotype - 表现层)**:
+    *   **定义**: 作物在当前环境下实际表现出的数值。
+    *   **计算时机**: 作物生长(BlockGrowEvent)、收割(BlockBreakEvent)、鉴定(Interact)时实时计算。
+    *   **公式**: `Phenotype = BaseValue * GeneExpression * EnvironmentalMultiplier`。
+
+#### 2.2.2 环境表观遗传 (Environmental Epigenetics)
+**现状**: BiomeGifts 仅提供静态的 `Rich/Poor` 修正，与作物基因无直接交互。
+**改动**: 建立 **"Environment Context (环境上下文)"** 交换协议。
+
+1.  **数据流向**:
+    *   **Input**: 
+        *   `BiomeGifts`: 提供群系特征 (Rich/Poor, Swamp/Desert)。
+        *   `RealisticSeasons`: 提供实时气温 (Temp)、湿度 (Rain)。
+    *   **Process (CuisineFarming)**: 
+        *   基因判断环境是否匹配 (e.g., `[耐寒]` 基因检测 `Temp < 5°C`)。
+        *   计算**适应性系数 (Adaptability Score)**。
+    *   **Output**: 
+        *   返回给 `BiomeGifts` 一个最终的 `EffectiveLuck` 用于计算掉落。
+        *   返回给 `CropTask` 一个 `GrowthRate` 用于计算生长。
+
+2.  **基因-环境互作逻辑 (GxE Interaction)**:
+    *   **适应性 (Adaptation)**: 
+        *   `[耐旱]` 基因在 `Desert` 群系：表现 = 150% (优势表达)。
+        *   `[耐旱]` 基因在 `Jungle` 群系：表现 = 80% (根系腐烂)。
+    *   **胁迫 (Stress)**:
+        *   `[巨大化]` 基因需要 `Rich` 土壤支持。若在 `Poor` 土壤种植，表现值强制降为 50% (营养不良)。
+
+#### 2.2.3 杂交与繁育循环 (Hybridization & Breeding Loop)
+**现状**: 简单的父本数值平均 + 随机突变。
+**改动**: 引入 **"杂种优势 (Heterosis)"** 与 **"性状分离 (Segregation)"**。
+
+1.  **遗传算法 (The Punnett Square)**:
+    *   **配子生成**: 父本 `[A, B]` 随机贡献 `A` 或 `B`。
+    *   **合子形成**: `Parent1_Gamete + Parent2_Gamete -> Offspring_Genotype`。
+
+2.  **核心机制：杂种优势 (Hybrid Vigor)**:
+    *   **设定**: 杂合子 `[S, D]` 的表型强度 > 纯合子 `[S, S]`。
+    *   *数值示例*:
+        *   `[S, S]` (纯合): 产量 120% (稳定，可留种)。
+        *   `[S, D]` (杂合): 产量 160% (极强，**不可稳定留种**)。
+    *   **玩法影响**: 
+        *   玩家不能只通过一次杂交获得“毕业种子”。
+        *   必须维护 **亲本田 (Parent Fields)** 种植纯合子 `[S, S]` 和 `[D, D]`。
+        *   每年春天进行 **制种 (Seed Production)**，杂交产生 F1 代 `[S, D]` 用于当季生产。
+
+3.  **退化机制 (Degeneration)**:
+    *   若玩家强行种植 F1 代产出的种子 (F2)，将发生性状分离：
+        *   25% `[S, S]` (良)
+        *   50% `[S, D]` (优)
+        *   25% `[D, D]` (中)
+    *   田地里作物参差不齐，导致批量收割困难，整体效率下降。
+
+#### 2.2.4 跨插件调用链路 (Integration Pipeline)
+1.  **生长阶段 (Growth)**:
+    *   `BlockGrowEvent` -> `CuisineFarming` 读取 PDC 基因 -> 获取 `RealisticSeasons` 温度 -> 计算生长速度 -> 决定是否取消/加速生长。
+
+2.  **掉落阶段 (Drops - The "Second Knife")**:
+    *   `BlockBreakEvent` -> `BiomeGifts` 介入。
+    *   `BiomeGifts` 构建 `EnvironmentContext` (Rich/Poor, BiomeType)。
+    *   `BiomeGifts` 调用 `CuisineFarming.getEffectiveYield(Block, Context)`。
+    *   `CuisineFarming` 根据基因+环境计算最终倍率 (e.g., 1.5x)。
+    *   `BiomeGifts` 结合自身的 BaseChance，执行最终掉落逻辑。
+
+#### 2.2.5 物品与 UI (Items & UI)
+*   **鉴定镜 (Magnifying Glass)**: 
+    *   左键点击作物 -> 聊天栏显示详细基因图谱 (e.g., `生长: [S, D] (强盛)`).
+*   **授粉笔 (Pollen Brush)**: 
+    *   右键作物 A (吸取花粉) -> 右键作物 B (授粉) -> 消耗耐久，B 结出的种子变为杂交种。
+*   **种子袋 (Seed Bag)**:
+    *   用于批量存储和筛选基因，避免背包混乱。
 
 ### 2.3 厨房与烹饪 (Kitchen & Cooking)
 **核心需求**: 拆解烹饪流程，引入 Tier (复杂度) 与 Quality (品质) 双维度评价，增加 QTE 操作感。

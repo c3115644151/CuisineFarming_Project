@@ -3,8 +3,8 @@ package com.example.cuisinefarming.listeners;
 import com.example.cuisinefarming.CuisineFarming;
 import com.example.cuisinefarming.fertility.FertilityManager;
 import com.example.cuisinefarming.genetics.GeneData;
-import com.example.cuisinefarming.genetics.GeneType;
 import com.example.cuisinefarming.genetics.GeneticsManager;
+import com.example.cuisinefarming.genetics.Trait;
 import net.kyori.adventure.text.Component;
 import org.bukkit.Bukkit;
 import org.bukkit.Location;
@@ -573,17 +573,17 @@ public class DebugListener implements Listener {
         
         player.sendMessage("§7正在模拟物品: " + hand.getType());
 
-        double yieldBonus = data.getGene(GeneType.YIELD);
+        double yieldBonus = data.getGenePair(Trait.YIELD).getPhenotypeValue();
         player.sendMessage(Component.text("§8§m--------------------------------"));
         player.sendMessage(Component.text("§b[收获模拟 (Harvest Simulation)]"));
         player.sendMessage(Component.text("  §7当前产量基因: §e" + String.format("%.2f", yieldBonus) + "x"));
 
         // 1. 原版掉落模拟 (Vanilla Drops)
         player.sendMessage(Component.text("  §61. 原版掉落加成 (Vanilla Bonus):"));
-        if (yieldBonus <= 1.0) {
-            player.sendMessage(Component.text("    §7- 无加成 (<= 1.0)"));
+        if (yieldBonus <= 0.0) {
+            player.sendMessage(Component.text("    §7- 无加成 (<= 0.0)"));
         } else {
-            double remaining = yieldBonus - 1.0;
+            double remaining = yieldBonus;
             int step = 1;
             int totalExtra = 0;
             
@@ -605,8 +605,8 @@ public class DebugListener implements Listener {
 
         // 2. 特产掉落模拟 (Specialty Drops)
         player.sendMessage(Component.text("  §d2. 特产掉落修正 (Specialty Modifier):"));
-        // Formula: Bonus = -0.25 + (Yield / 5.0) * 1.25
-        double bonusPercent = -0.25 + (yieldBonus / 5.0) * 1.25;
+        // Formula: Bonus = (Yield * 1.25 - 4.25) / 7.0
+        double bonusPercent = (yieldBonus * 1.25 - 4.25) / 7.0;
         double multiplier = 1.0 + bonusPercent;
         if (multiplier < 0.0) multiplier = 0.0;
         

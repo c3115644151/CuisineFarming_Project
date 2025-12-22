@@ -246,8 +246,12 @@ public class SeedAnalyzerGUI implements InventoryHolder, Listener {
         GeneData genes = geneticsManager.getGenesFromItem(seedItem);
         if (genes == null) genes = new GeneData();
         
-        // 2. The "European Emperor Algorithm" (Randomize)
-        genes.randomize();
+        // 2. Randomize ONLY if no existing gene data found (e.g. wild/store-bought seeds)
+        // If the seed was harvested from a crop, it should already have gene data in PDC.
+        if (!geneticsManager.hasGeneData(seedItem)) {
+            genes.randomize();
+        }
+        
         genes.setIdentified(true);
         
         // 3. Save to item
@@ -257,7 +261,14 @@ public class SeedAnalyzerGUI implements InventoryHolder, Listener {
         inventory.setItem(SLOT_OUTPUT, result);
         updateButton(ButtonState.IDLE);
         player.playSound(player.getLocation(), Sound.ENTITY_PLAYER_LEVELUP, 1f, 1.0f);
-        player.sendMessage(Component.text("§a[Cuisine] §f种子鉴定成功！基因评级: " + geneticsManager.getStarDisplay(genes.calculateStarRating())));
+        
+        int totalStars = genes.calculateStarRating();
+        StringBuilder starBuilder = new StringBuilder();
+        for (int i = 0; i < totalStars; i++) starBuilder.append("⭐");
+        starBuilder.append("§8");
+        for (int i = totalStars; i < 5; i++) starBuilder.append("⭐");
+        
+        player.sendMessage(Component.text("§a[Cuisine] §f种子鉴定成功！基因评级: §e" + starBuilder.toString() + " §7(" + totalStars + "星)"));
         
         checkState(); // Re-check button state
     }

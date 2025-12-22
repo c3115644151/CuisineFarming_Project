@@ -32,6 +32,9 @@ public class CuisineItemManager {
         // 机器 (工作方块)
         registerItem("SEED_ANALYZER", Material.IRON_BLOCK, "种子分析仪", 20004, "§7用于鉴定未知种子的基因数据。", "§e放置后右键打开工作界面。");
 
+        // 杂交工具
+        registerItem("POLLEN_PAPER", Material.PAPER, "花粉采样纸", 20005, "§7用于采集和传播作物花粉。", "§e右键作物采集花粉，", "§e再次右键其他作物进行授粉。");
+
         plugin.getLogger().info("Registered " + customItems.size() + " cuisine items.");
     }
 
