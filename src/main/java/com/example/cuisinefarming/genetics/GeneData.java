@@ -85,7 +85,7 @@ public class GeneData {
         }
     }
     
-    private GenePair generateRandomPair(ThreadLocalRandom random) {
+    public static GenePair generateRandomPair(ThreadLocalRandom random) {
         double roll = random.nextDouble();
         
         // 60% 普通: A1 + a1 = 0
@@ -152,14 +152,14 @@ public class GeneData {
             totalScore += pair.getPhenotypeValue();
         }
         
-        // 归一化到 1-5 星
-        // 假设有 5 个性状
-        // 最低: 5 * 2 = 10 分 -> 1星
-        // 最高: 5 * 6 = 30 分 -> 5星
+        // 归一化到 1-6 星 (适配 A4 传说基因)
+        // 假设有 6 个性状 (Trait.values().length)
+        // A3+A2 (Max Natural): 10.0 avg
+        // A4+A3 (Mythical): 14.0 avg
         
-        // 重新调整星级算法
         double avgScore = totalScore / Trait.values().length;
         
+        if (avgScore >= 12.0) return 6; // Mythical
         if (avgScore >= 8.0) return 5;
         if (avgScore >= 6.0) return 4;
         if (avgScore >= 4.0) return 3;

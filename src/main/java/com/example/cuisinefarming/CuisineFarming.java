@@ -15,6 +15,7 @@ public class CuisineFarming extends JavaPlugin {
     private CuisineItemManager itemManager;
     private GeneticsManager geneticsManager;
     private com.example.cuisinefarming.pollination.PollinationManager pollinationManager;
+    private com.example.cuisinefarming.cooking.CookingManager cookingManager;
     private FarmingListener farmingListener;
     // private MonocleTask monocleTask;
 
@@ -27,10 +28,12 @@ public class CuisineFarming extends JavaPlugin {
         this.itemManager = new CuisineItemManager(this);
         this.geneticsManager = new GeneticsManager(this); // Initialize here
         this.pollinationManager = new com.example.cuisinefarming.pollination.PollinationManager(this);
+        this.cookingManager = new com.example.cuisinefarming.cooking.CookingManager(this);
 
         // Register Listeners
         this.farmingListener = new FarmingListener(this);
         new com.example.cuisinefarming.listeners.PollinationListener(this, pollinationManager);
+        new com.example.cuisinefarming.cooking.CookingPotListener(this); // Register CookingPotListener
         getServer().getPluginManager().registerEvents(new SeedAnalyzerListener(this), this);
         
         // Register Commands
@@ -39,6 +42,9 @@ public class CuisineFarming extends JavaPlugin {
         if (getCommand("getchemical") != null) getCommand("getchemical").setExecutor(commandExecutor);
         if (getCommand("getmonocle") != null) getCommand("getmonocle").setExecutor(commandExecutor);
         if (getCommand("getanalyzer") != null) getCommand("getanalyzer").setExecutor(commandExecutor);
+        if (getCommand("getfan") != null) getCommand("getfan").setExecutor(commandExecutor);
+        if (getCommand("getladle") != null) getCommand("getladle").setExecutor(commandExecutor);
+        if (getCommand("getpot") != null) getCommand("getpot").setExecutor(commandExecutor);
         
         // Debug Command
         if (getCommand("getdebugtool") != null) getCommand("getdebugtool").setExecutor(new com.example.cuisinefarming.commands.DebugCommandExecutor(this));
@@ -79,5 +85,9 @@ public class CuisineFarming extends JavaPlugin {
 
     public FarmingListener getFarmingListener() {
         return farmingListener;
+    }
+
+    public com.example.cuisinefarming.cooking.CookingManager getCookingManager() {
+        return cookingManager;
     }
 }

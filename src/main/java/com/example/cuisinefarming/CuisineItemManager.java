@@ -35,6 +35,13 @@ public class CuisineItemManager {
         // 杂交工具
         registerItem("POLLEN_PAPER", Material.PAPER, "花粉采样纸", 20005, "§7用于采集和传播作物花粉。", "§e右键作物采集花粉，", "§e再次右键其他作物进行授粉。");
 
+        // 烹饪 - 工具
+        registerItem("HAND_FAN", Material.FEATHER, "蒲扇", 20006, "§7轻轻一扇，火势大增。", "§e对着营火/厨锅右键扇风。", "§6用途: 控制火候");
+        registerItem("WOODEN_LADLE", Material.BOWL, "木汤勺", 20007, "§7用来搅拌汤汁或盛出料理。", "§e右键搅拌厨锅。", "§6用途: 混合/降温/确认烹饪");
+        
+        // 烹饪 - 容器
+        registerItem("COOKING_POT", Material.CAULDRON, "厨锅", 20008, "§7一口厚实的铁锅。", "§e放置在营火上方使用。", "§6用途: 烹饪食物");
+
         plugin.getLogger().info("Registered " + customItems.size() + " cuisine items.");
     }
 

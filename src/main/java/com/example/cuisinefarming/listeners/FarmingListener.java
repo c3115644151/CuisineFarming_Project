@@ -119,6 +119,18 @@ public class FarmingListener implements Listener {
                 
                 // --- 基因集成: 生长速度 & 耐肥性 (Refactored 2025-12-22) ---
                 GeneData geneData = geneticsManager.getGenesFromBlock(block);
+                
+                // [New 2025-12-23] 杂交状态视觉反馈 (Pollen Particles)
+                // 检查该作物是否已被授粉（携带外源花粉）
+                if (geneticsManager.getPollenFromBlock(block) != null) {
+                    // 播放 "孢子花" 粒子效果，表示正在进行基因交流
+                    // 这种粒子在空气中悬浮，很有生物感
+                    if (random.nextDouble() < 0.3) { // 降低频率，避免过于密集
+                        // 兼容性修复: 使用 VILLAGER_HAPPY 替代 SPORE_BLOSSOM 以兼容旧版本或防止报错
+                        block.getWorld().spawnParticle(Particle.SPORE_BLOSSOM_AIR, block.getLocation().add(0.5, 0.6, 0.5), 1, 0.2, 0.2, 0.2, 0.0);
+                    }
+                }
+
                 if (geneData != null) {
                     // 1. 获取效率细分
                     FertilityManager.EfficiencyBreakdown breakdown = fertilityManager.calculateEfficiencyBreakdown(soil);
@@ -137,13 +149,20 @@ public class FarmingListener implements Listener {
                     double resistanceBonus = 0.01 * concentration * (1.0 - concentration / (2.0 * resistance));
                     
                     // 3. 生长速度 (Growth Speed) (Trait A)
-                    // Map [-8, 8] to [-1.0, 1.0]
+                    // Map [-10, 10] to [-1.0, 1.0]
                     double growthGeneVal = geneData.getGenePair(Trait.GROWTH_SPEED).getPhenotypeValue();
-                    double growthBonus = growthGeneVal / 8.0;
+                    double growthBonus = growthGeneVal / 10.0;
                     
-                    // 4. 汇总
-                    // Efficiency = (Base + Fertility + Biome...) + ActiveConcentrationBonus + GeneSpeedBonus
-                    efficiency = currentEfficiency + resistanceBonus + growthBonus;
+                    // 4. 温度适应性 (Temperature Tolerance) (Trait C)
+                    double temp = block.getWorld().getTemperature(block.getLocation().getBlockX(), block.getLocation().getBlockY(), block.getLocation().getBlockZ());
+                    double tempDiff = Math.abs(temp - 0.8); 
+                    double tempPenalty = tempDiff * 0.5;
+                    double tempGeneVal = geneData.getGenePair(Trait.TEMPERATURE_TOLERANCE).getPhenotypeValue();
+                    double tempBonus = tempGeneVal / 20.0; 
+
+                    // 5. 汇总
+                    // Efficiency = (Base + Fertility + Biome...) + ActiveConcentrationBonus + GeneSpeedBonus + (TempBonus - TempPenalty)
+                    efficiency = currentEfficiency + resistanceBonus + growthBonus + (tempBonus - tempPenalty);
                 }
                 // --------------------------------------
                 
@@ -288,9 +307,24 @@ public class FarmingListener implements Listener {
             double growthGeneVal = geneData.getGenePair(Trait.GROWTH_SPEED).getPhenotypeValue();
             // Map [-10, 10] to [-1.0, 1.0]
             double growthBonus = growthGeneVal / 10.0;
+
+            // 4. 温度适应性 (Temperature Tolerance) (Trait C)
+            // 逻辑: 每个生物群系都有温度。以平原(0.8)为基准，偏差越大生长越慢。
+            // Trait C 提供修正。正值抵抗极端温度，负值加剧敏感度。
+            double temp = block.getWorld().getTemperature(block.getLocation().getBlockX(), block.getLocation().getBlockY(), block.getLocation().getBlockZ());
+            // 偏差: 0.0 (0.8) -> 1.2 (2.0 Desert) or 0.8 (0.0 Snow)
+            double tempDiff = Math.abs(temp - 0.8); 
+            // 基础环境惩罚: 每偏离 1.0，效率 -0.5
+            double tempPenalty = tempDiff * 0.5;
             
-            // 4. 汇总
-            totalEfficiency = baseEfficiencyWithoutFertility + resistanceBonus + growthBonus;
+            // 基因修正: -10.0 ~ +10.0 -> -0.5 ~ +0.5
+            // +10 (厚皮) 可以抵消 1.0 的温度偏差 (即适应沙漠/雪地)
+            double tempGeneVal = geneData.getGenePair(Trait.TEMPERATURE_TOLERANCE).getPhenotypeValue();
+            double tempBonus = tempGeneVal / 20.0; 
+            
+            // 5. 汇总
+            // Efficiency = (Base + Fertility) + ResistanceBonus + GrowthBonus + (TempBonus - TempPenalty)
+            totalEfficiency = baseEfficiencyWithoutFertility + resistanceBonus + growthBonus + (tempBonus - tempPenalty);
         }
         // -----------------------------------------------------------
         
@@ -339,30 +373,6 @@ public class FarmingListener implements Listener {
         
         // 如果我们有基因数据，我们必须确保它转移到掉落物
         if (geneData != null) {
-            // 杂交逻辑
-            GeneData dropGenes = geneData; // 默认为母本
-            
-            if (pollenData != null && ageable.getAge() == ageable.getMaximumAge()) {
-                dropGenes = geneticsManager.hybridize(geneData, pollenData);
-                // 成功繁殖的特效
-                block.getWorld().spawnParticle(Particle.HEART, block.getLocation().add(0.5, 0.5, 0.5), 3);
-            } else {
-                // 如果没有杂交
-                // 1. 如果母本是默认基因 (野生作物)，则生成随机基因 (模拟鉴定/发现过程)
-                if (geneData.isDefault()) {
-                    dropGenes = new GeneData();
-                    dropGenes.randomize(); // 正态分布随机
-                } 
-                // 2. 如果母本已有特定基因，则继承 (克隆)
-                else {
-                    // TODO: 可以在这里添加微小的自然突变概率?
-                    dropGenes = geneData; 
-                }
-                
-                // 强制重置为未鉴定，以展示 Adjective 系统 (Vague Lore)
-                dropGenes.setIdentified(false);
-            }
-            
             // 取消原版掉落，以便我们可以生成我们修改后的掉落物
             event.setDropItems(false);
             
@@ -370,55 +380,137 @@ public class FarmingListener implements Listener {
             ItemStack tool = event.getPlayer().getInventory().getItemInMainHand();
             java.util.Collection<ItemStack> drops = block.getDrops(tool);
             
-            // 将基因数据应用到所有掉落物 (种子和产物)
+            // [New 2025-12-23] 优化收获逻辑: 种子自交与独立掉落
             for (ItemStack drop : drops) {
-                geneticsManager.saveGenesToItem(drop, dropGenes);
+                Material type = drop.getType();
+                boolean isSeed = isCropSeed(type);
+                boolean isDualPurpose = (type == Material.POTATO || type == Material.CARROT);
+                
+                // 逻辑拆分:
+                // 1. 纯种子 (Wheat Seeds): 总是保留基因
+                // 2. 双重用途 (Potato): 第一颗作为种子保留基因，其余作为食材只保留星级
+                // 3. 纯产物 (Wheat, Melon): 只保留星级
+                
+                if (isSeed) {
+                    int amount = drop.getAmount();
+                    
+                    // 如果是双重用途作物，我们需要拆分掉落物
+                    // 如果是纯种子，通常也需要拆分以计算各自的突变，但为了堆叠方便...
+                    // 不，纯种子为了育种，每一颗都可能有不同的突变，所以不能堆叠。
+                    // 现在的逻辑是每一颗都独立计算。
+                    
+                    for (int i = 0; i < amount; i++) {
+                        ItemStack singleItem = drop.clone();
+                        singleItem.setAmount(1);
+                        
+                        // 判定是否应该作为种子保留基因
+                        // 修正: 所有的掉落物都应该保留基因，如果是种子或双重用途作物 (Potato/Carrot)
+                        // 纯产物 (Wheat/Melon) 才只保留星级
+                        boolean treatAsSeed = isSeed || isDualPurpose;
+                        
+                        if (treatAsSeed) {
+                            // --- 种子逻辑 (保留基因 & 突变) ---
+                            GeneData seedGenes;
+                            
+                            // 环境突变逻辑 (Environmental Mutation)
+                            double mutationRate = 0.001;
+                            
+                            // 1. 辐射高空
+                            if (block.getWorld().getEnvironment() == org.bukkit.World.Environment.NORMAL && block.getY() >= 310) {
+                                mutationRate += 0.01;
+                            } else if (block.getWorld().getEnvironment() == org.bukkit.World.Environment.THE_END && block.getY() >= 250) {
+                                mutationRate += 0.01;
+                            }
+                            
+                            // 2. 混沌生物群系
+                            org.bukkit.block.Biome biome = block.getBiome();
+                            if (biome == org.bukkit.block.Biome.MUSHROOM_FIELDS || 
+                                biome == org.bukkit.block.Biome.THE_END || 
+                                biome == org.bukkit.block.Biome.END_HIGHLANDS ||
+                                biome == org.bukkit.block.Biome.END_MIDLANDS ||
+                                biome == org.bukkit.block.Biome.END_BARRENS ||
+                                biome == org.bukkit.block.Biome.SMALL_END_ISLANDS) {
+                                mutationRate += 0.005;
+                            }
+    
+                            // Case A: 杂交
+                            if (pollenData != null && ageable.getAge() == ageable.getMaximumAge()) {
+                                 seedGenes = geneticsManager.hybridize(geneData, pollenData, mutationRate);
+                                 if (i == 0) block.getWorld().spawnParticle(Particle.HEART, block.getLocation().add(0.5, 0.5, 0.5), 3);
+                            }
+                            // Case B: 自交
+                            else {
+                                if (geneData.isDefault()) {
+                                    seedGenes = new GeneData();
+                                    seedGenes.randomize();
+                                } else {
+                                    seedGenes = geneticsManager.selfPollinate(geneData, mutationRate);
+                                }
+                            }
+                            
+                            // 对于双重用途作物，我们保留基因，但也希望它们看起来像食材
+                            // 我们的 GeneticsManager.saveGenesToItem 现在会统一显示 "品质: ⭐⭐⭐⭐"
+                            // 所以这解决了视觉反馈问题。
+                            
+                            seedGenes.setIdentified(false);
+                            geneticsManager.saveGenesToItem(singleItem, seedGenes);
+                            
+                        } else {
+                            // --- 纯食材逻辑 (Wheat/Melon etc) ---
+                            // 仅保留星级
+                            int stars = geneData.calculateStarRating();
+                            geneticsManager.saveStarToItem(singleItem, stars);
+                        }
+                        
+                        block.getWorld().dropItemNaturally(block.getLocation(), singleItem);
+                    }
+                } else {
+                    // 非种子产物 (如果实/小麦/甜菜根)
+                    // 逻辑: 只保留星级，移除基因，支持堆叠
+                    int stars = geneData.calculateStarRating();
+                    geneticsManager.saveStarToItem(drop, stars);
+                    block.getWorld().dropItemNaturally(block.getLocation(), drop);
+                }
             }
             
             // 产量加成逻辑 (Trait B - YIELD)
             if (ageable.getAge() == ageable.getMaximumAge()) {
-                double yieldScore = geneData.getGenePair(Trait.YIELD).getPhenotypeValue();
+                double yieldMultiplier = geneticsManager.getYieldMultiplier(geneData);
                 
-                // 规则: 若总分小于0，不额外掉落。
-                // 若总分大于0，每 1 分提供 1 个判定区间，每个区间 25% 概率。
-                // 这意味着 1 分期望提供 0.25 个额外物品。
-                // 若有小数部分，向上取整作为一个完整区间 (Ceiling)。
-                
-                if (yieldScore > 0) {
-                    // 1 Score = 1 Interval
-                    int loops = (int) Math.ceil(yieldScore);
-                    int extraItems = 0;
+                if (yieldMultiplier > 1.0) {
+                    double extraChance = yieldMultiplier - 1.0;
+                    int guaranteedExtra = (int) extraChance;
+                    double fractionalChance = extraChance - guaranteedExtra;
                     
-                    for (int i = 0; i < loops; i++) {
-                        if (random.nextDouble() < 0.25) {
-                            extraItems++;
-                        }
+                    int extraItems = guaranteedExtra;
+                    if (random.nextDouble() < fractionalChance) {
+                        extraItems++;
                     }
                     
                     if (extraItems > 0 && !drops.isEmpty()) {
-                         // 找到主要产物物品进行复制
+                         // 找到主要产物物品进行复制 (非种子优先，其次是双重用途的食材形式)
                          ItemStack template = null;
                          for (ItemStack d : drops) {
-                             if (!d.getType().name().contains("SEEDS")) {
+                             if (!isCropSeed(d.getType())) {
                                  template = d;
                                  break;
                              }
                          }
+                         // 如果没有非种子产物 (如土豆)，使用第一个掉落物作为模板
                          if (template == null && !drops.isEmpty()) template = drops.iterator().next();
                          
                          if (template != null) {
                              ItemStack extraDrop = template.clone();
                              extraDrop.setAmount(extraItems);
-                             geneticsManager.saveGenesToItem(extraDrop, dropGenes); // 确保基因
+                             
+                             // 额外产量始终是食材 (星级物品)
+                             int stars = geneData.calculateStarRating();
+                             geneticsManager.saveStarToItem(extraDrop, stars);
+                             
                              block.getWorld().dropItemNaturally(block.getLocation(), extraDrop);
                          }
                     }
                 }
-            }
-            
-            // 生成修改后的掉落物
-            for (ItemStack drop : drops) {
-                block.getWorld().dropItemNaturally(block.getLocation(), drop);
             }
         }
         // -----------------------------------------

@@ -29,11 +29,13 @@ public class GeneticsManager {
     
     private final NamespacedKey CHUNK_GENE_DATA_KEY; 
     private final NamespacedKey CHUNK_POLLEN_DATA_KEY;
+    private final NamespacedKey STAR_RATING_KEY; // New key for Star-Only items
 
     public GeneticsManager(CuisineFarming plugin) {
         this.IDENTIFIED_KEY = new NamespacedKey(plugin, "gene_identified");
         this.CHUNK_GENE_DATA_KEY = new NamespacedKey(plugin, "chunk_crop_genes");
         this.CHUNK_POLLEN_DATA_KEY = new NamespacedKey(plugin, "chunk_crop_pollen");
+        this.STAR_RATING_KEY = new NamespacedKey(plugin, "food_star_rating");
         this.TRAIT_KEYS = new java.util.EnumMap<>(Trait.class);
         
         for (Trait trait : Trait.values()) {
@@ -74,10 +76,32 @@ public class GeneticsManager {
             }
         }
         
+        // 如果没有基因数据，但有星级数据 (烹饪食材被当作种子种下)
+        // [Modified] 既然我们不再支持 "星级食材复种" (防止刷基因)，这里直接忽略星级数据，返回空基因(或默认基因)
+        // 玩家如果种下纯星级食材(如小麦)，它将长成默认的野生作物。
+        // 这符合逻辑：加工过的食材可能失去了遗传特性，或者只能长出最普通的。
+        // 或者，我们可以完全禁止种植纯星级物品? 不，这太麻烦。
+        // 暂时保持 "hasData" 检查。如果没有基因数据，它就是一个全新的默认基因。
+        
+        /*
+        if (!hasData && pdc.has(STAR_RATING_KEY, PersistentDataType.INTEGER)) {
+            int stars = pdc.get(STAR_RATING_KEY, PersistentDataType.INTEGER);
+            return generateRandomGenesByStars(stars);
+        }
+        */
+        
         // 如果没有数据 (全新的物品)，返回默认数据
-        // 注意: 实际上应该由调用者决定是否生成新数据
         return data;
     }
+
+    /**
+     * 根据星级生成随机基因 (Deprecated - Removed to prevent exploit)
+     */
+     /*
+    private GeneData generateRandomGenesByStars(int targetStars) {
+        ...
+    }
+    */
 
     /**
      * 将基因数据写入物品堆栈。
@@ -109,6 +133,58 @@ public class GeneticsManager {
         item.setItemMeta(meta);
     }
     
+    // ==========================================
+    // 星级物品逻辑 (用于烹饪食材)
+    // ==========================================
+
+    /**
+     * 将物品转换为仅含星级的食材 (移除基因数据，支持堆叠)
+     */
+    public void saveStarToItem(ItemStack item, int stars) {
+        if (item == null || item.getType().isAir()) return;
+        
+        ItemMeta meta = item.getItemMeta();
+        PersistentDataContainer pdc = meta.getPersistentDataContainer();
+        
+        // 1. 清除旧数据 (基因 & 鉴定状态)
+        pdc.remove(IDENTIFIED_KEY);
+        for (NamespacedKey key : TRAIT_KEYS.values()) {
+            pdc.remove(key);
+        }
+        
+        // 2. 写入星级数据
+        pdc.set(STAR_RATING_KEY, PersistentDataType.INTEGER, stars);
+        
+        // 3. 更新显示 (Lore)
+        List<Component> lore = new ArrayList<>();
+        
+        // 构建星级条
+        StringBuilder starBuilder = new StringBuilder();
+        for (int i = 0; i < stars; i++) starBuilder.append("⭐");
+        starBuilder.append("§8");
+        for (int i = stars; i < 5; i++) starBuilder.append("⭐");
+        
+        lore.add(Component.text("§b品质: §e" + starBuilder.toString() + " §7(" + stars + "星)"));
+        lore.add(Component.text("§7[优质食材]")); // 标识这是食材而非种子
+        
+        meta.lore(lore);
+        
+        // 4. 更新名字 (可选，增加一点风味)
+        // 例如: "三星级 马铃薯"
+        // Component name = Component.text("§e" + stars + "星级 ").append(Component.translatable(item.getType().translationKey()));
+        // meta.displayName(name);
+        
+        item.setItemMeta(meta);
+    }
+
+    /**
+     * 检查物品是否是仅含星级的食材
+     */
+    public boolean isStarItem(ItemStack item) {
+        if (item == null || !item.hasItemMeta()) return false;
+        return item.getItemMeta().getPersistentDataContainer().has(STAR_RATING_KEY, PersistentDataType.INTEGER);
+    }
+
     // 解析 "W:D" -> GenePair
     private GenePair parseGenePair(String str) {
         if (str == null || !str.contains(":")) return new GenePair(Allele.DOMINANT_1, Allele.RECESSIVE_1);
@@ -138,11 +214,13 @@ public class GeneticsManager {
         }
         
         if (isDominant) {
-            if (level >= 3) return Allele.DOMINANT_3;
+            if (level >= 4) return Allele.DOMINANT_4;
+            if (level == 3) return Allele.DOMINANT_3;
             if (level == 2) return Allele.DOMINANT_2;
             return Allele.DOMINANT_1;
         } else {
-            if (level >= 3) return Allele.RECESSIVE_3;
+            if (level >= 4) return Allele.RECESSIVE_4;
+            if (level == 3) return Allele.RECESSIVE_3;
             if (level == 2) return Allele.RECESSIVE_2;
             return Allele.RECESSIVE_1;
         }
@@ -165,7 +243,9 @@ public class GeneticsManager {
         starBuilder.append("§8");
         for (int i = totalStars; i < 5; i++) starBuilder.append("⭐");
         
-        lore.add(Component.text("§b基因评级: §e" + starBuilder.toString() + " §7(" + totalStars + "星)"));
+        // [Modified] 统一显示：既显示星级(食材属性)也显示基因(种植属性)
+        // 这里的 "品质" 兼容了食材星级显示，避免 lore 冲突
+        lore.add(Component.text("§b品质: §e" + starBuilder.toString() + " §7(" + totalStars + "星)"));
         
         // 遍历所有性状显示
         for (Trait trait : Trait.values()) {
@@ -247,13 +327,13 @@ public class GeneticsManager {
     private String getTierColor(double val) {
         double abs = Math.abs(val);
         if (val > 0) {
-            if (abs >= 9.0) return "§d"; // T4: Light Purple
-            if (abs >= 7.0) return "§6"; // T3: Gold
+            if (abs >= 11.0) return "§d"; // T4: Light Purple
+            if (abs >= 8.0) return "§6"; // T3: Gold
             if (abs >= 5.0) return "§b"; // T2: Aqua (Blue-ish)
             return "§a";                 // T1: Green
         } else {
-            if (abs >= 9.0) return "§8"; // T4: Dark Gray
-            if (abs >= 7.0) return "§5"; // T3: Dark Purple
+            if (abs >= 11.0) return "§8"; // T4: Dark Gray
+            if (abs >= 8.0) return "§5"; // T3: Dark Purple
             if (abs >= 5.0) return "§4"; // T2: Dark Red
             return "§c";                 // T1: Red
         }
@@ -423,12 +503,46 @@ public class GeneticsManager {
     // ==========================================
     
     /**
+     * 自交算法 (Self-Pollination)
+     * 用于模拟单株作物产生种子时的基因重组。
+     * 相当于父本和母本是同一个体。
+     */
+    public GeneData selfPollinate(GeneData parent, double mutationRate) {
+        return hybridize(parent, parent, mutationRate);
+    }
+
+    public GeneData selfPollinate(GeneData parent) {
+        return selfPollinate(parent, 0.05); // Default 5%
+    }
+
+    /**
+     * 获取特产掉落倍率 (Yield Multiplier for Special Drops)
+     * 基于 Trait B (结实量)
+     * 规则:
+     *   Score < 0: 1.0 (无加成)
+     *   Score 0-10: 1.0 ~ 2.0 (线性增加)
+     */
+    public double getYieldMultiplier(GeneData data) {
+        if (data == null) return 1.0;
+        double score = data.getGenePair(Trait.YIELD).getPhenotypeValue();
+        if (score <= 0) return 1.0;
+        
+        // Map 0 -> 10 to 1.0 -> 2.0
+        // Formula: 1.0 + (score / 10.0)
+        return 1.0 + (score / 10.0);
+    }
+    
+    /**
      * 孟德尔杂交算法
      * 1. 父母各随机贡献一个等位基因 (配子)
      * 2. 组合成子代基因对
      * 3. 极低概率发生基因突变 (W -> D, D -> S)
      */
     public GeneData hybridize(GeneData mother, GeneData father) {
+        return hybridize(mother, father, 0.05); // Default 5%
+    }
+
+    public GeneData hybridize(GeneData mother, GeneData father, double mutationRate) {
         GeneData offspring = new GeneData();
         offspring.setIdentified(false); // 杂交后的种子初始为未鉴定状态，保持探索感
         
@@ -442,11 +556,11 @@ public class GeneticsManager {
             Allele fromMother = random.nextBoolean() ? motherPair.getFirst() : motherPair.getSecond();
             Allele fromFather = random.nextBoolean() ? fatherPair.getFirst() : fatherPair.getSecond();
             
-            // 2. 突变 (Mutation) - 5% 概率
-            if (random.nextDouble() < 0.05) {
+            // 2. 突变 (Mutation) - 动态概率
+            if (random.nextDouble() < mutationRate) {
                 fromMother = mutate(fromMother, random);
             }
-            if (random.nextDouble() < 0.05) {
+            if (random.nextDouble() < mutationRate) {
                 fromFather = mutate(fromFather, random);
             }
             
@@ -458,26 +572,30 @@ public class GeneticsManager {
     
     private Allele mutate(Allele original, ThreadLocalRandom random) {
         // 进化/退化逻辑更新
-        // 正向突变: a3 -> a2 -> a1 -> A1 -> A2 -> A3
-        // 负向突变: A3 -> A2 -> A1 -> a1 -> a2 -> a3
+        // 正向突变: a4 -> a3 -> a2 -> a1 -> A1 -> A2 -> A3 -> A4
+        // 负向突变: A4 -> A3 -> A2 -> A1 -> a1 -> a2 -> a3 -> a4
         
         boolean positive = random.nextBoolean();
         int val = original.getValue();
         
         if (positive) {
             // 向上进化
+            if (val == -4) return Allele.RECESSIVE_3;
             if (val == -3) return Allele.RECESSIVE_2;
             if (val == -2) return Allele.RECESSIVE_1;
             if (val == -1) return Allele.DOMINANT_1;
             if (val == 1) return Allele.DOMINANT_2;
             if (val == 2) return Allele.DOMINANT_3;
+            if (val == 3) return Allele.DOMINANT_4;
         } else {
             // 向下退化
+            if (val == 4) return Allele.DOMINANT_3;
             if (val == 3) return Allele.DOMINANT_2;
             if (val == 2) return Allele.DOMINANT_1;
             if (val == 1) return Allele.RECESSIVE_1;
             if (val == -1) return Allele.RECESSIVE_2;
             if (val == -2) return Allele.RECESSIVE_3;
+            if (val == -3) return Allele.RECESSIVE_4;
         }
         return original;
     }

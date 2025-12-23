@@ -52,6 +52,18 @@ public class CuisineCommandExecutor implements CommandExecutor {
                 itemKey = "SEED_ANALYZER";
                 successMessage = "§a成功获取 种子分析仪！";
                 break;
+            case "getfan":
+                itemKey = "HAND_FAN";
+                successMessage = "§a成功获取 蒲扇！";
+                break;
+            case "getladle":
+                itemKey = "WOODEN_LADLE";
+                successMessage = "§a成功获取 木汤勺！";
+                break;
+            case "getpot":
+                itemKey = "COOKING_POT";
+                successMessage = "§a成功获取 厨锅！";
+                break;
             default:
                 return false;
         }

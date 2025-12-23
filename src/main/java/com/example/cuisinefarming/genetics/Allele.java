@@ -13,6 +13,8 @@ public enum Allele {
     DOMINANT_2(2),
     /** 显性 III 级 (A3): 强力增强 (+3) */
     DOMINANT_3(3),
+    /** 显性 IV 级 (A4): 传说增强 (+4) - [突变限定] */
+    DOMINANT_4(4),
 
     // --- 隐性基因 (Recessive) ---
     /** 隐性 I 级 (a1): 基础减弱 (-1) */
@@ -20,7 +22,9 @@ public enum Allele {
     /** 隐性 II 级 (a2): 进阶减弱 (-2) */
     RECESSIVE_2(-2),
     /** 隐性 III 级 (a3): 强力减弱 (-3) */
-    RECESSIVE_3(-3);
+    RECESSIVE_3(-3),
+    /** 隐性 IV 级 (a4): 传说减弱 (-4) - [突变限定] */
+    RECESSIVE_4(-4);
 
     private final int value;
 
@@ -50,11 +54,13 @@ public enum Allele {
         String code = getCode(trait);
         // 显性根据强度给色
         if (value > 0) {
+            if (value == 4) return "§d" + code; // A4 Light Purple (Mythical)
             if (value == 3) return "§6" + code; // A3 Gold
             if (value == 2) return "§2" + code; // A2 Dark Green
             return "§a" + code; // A1 Green
         } else {
             // 隐性
+            if (value == -4) return "§0" + code; // a4 Black (Void)
             if (value == -3) return "§8" + code; // a3 Dark Gray
             if (value == -2) return "§4" + code; // a2 Dark Red
             return "§c" + code; // a1 Red

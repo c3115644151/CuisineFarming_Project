@@ -26,6 +26,18 @@ commands:
     description: 获取种子分析仪
     usage: /getanalyzer
     permission: cuisinefarming.get
+  getfan:
+    description: 获取蒲扇 (烹饪工具)
+    usage: /getfan
+    permission: cuisinefarming.get
+  getladle:
+    description: 获取木汤勺 (烹饪工具)
+    usage: /getladle
+    permission: cuisinefarming.get
+  getpot:
+    description: 获取铸铁厨锅 (烹饪容器)
+    usage: /getpot
+    permission: cuisinefarming.get
   getdebugtool:
     description: 获取服务器调试工具
     usage: /getdebugtool
