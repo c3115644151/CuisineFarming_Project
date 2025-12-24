@@ -3,6 +3,7 @@ package com.example.cuisinefarming.cooking;
 import com.example.cuisinefarming.CuisineFarming;
 import net.kyori.adventure.text.Component;
 import org.bukkit.Location;
+import org.bukkit.Material;
 import org.bukkit.Particle;
 import org.bukkit.Sound;
 import org.bukkit.entity.Display;
@@ -20,6 +21,7 @@ import org.joml.AxisAngle4f;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 
 /**
  * 烹饪锅 (Cooking Pot) 实体类
@@ -237,7 +239,8 @@ public class CookingPot {
 
                 // 粒子效果
                 if (state == CookingState.COOKING) {
-                    location.getWorld().spawnParticle(Particle.CAMPFIRE_COSY_SMOKE, location.clone().add(0.5, 0.8, 0.5), 1, 0, 0.1, 0, 0.05);
+                    // 使用 Cloud 替代 Campfire Smoke 防止与下方营火烟雾重叠
+                    location.getWorld().spawnParticle(Particle.CLOUD, location.clone().add(0.5, 0.8, 0.5), 1, 0, 0.05, 0, 0.02);
                     if (Math.random() < 0.1) {
                         location.getWorld().playSound(location, Sound.BLOCK_FIRE_AMBIENT, 0.5f, 1.0f);
                     }
@@ -269,6 +272,11 @@ public class CookingPot {
         // 0. Check Completion -> Stop Heating
         if (state == CookingState.FINISHED || state == CookingState.BURNT) {
             isHeated = false;
+            // Auto-reset if output is taken
+            if (inventory.getItem(OUTPUT_SLOT) == null) {
+                state = CookingState.IDLE;
+                updateVisuals();
+            }
         }
         
         // 0.5. Check Idle Timeout
@@ -333,12 +341,12 @@ public class CookingPot {
         
         // 3. State Transition (Auto-fail only)
         if (state == CookingState.COOKING) {
-            cookingTimer++;
+            cookingTimer += 20; // 物理tick每秒运行一次 (20ticks)
             
             // Check QTE (Temperature in Optimal Zone)
             if (currentRecipe != null) {
                 if (temperature >= currentRecipe.getOptimalTempMin() && temperature <= currentRecipe.getOptimalTempMax()) {
-                    perfectCookingTicks++;
+                    perfectCookingTicks += 20; // Accumulate ticks (20 per second)
                 }
                 
                 // Check Completion
@@ -346,17 +354,154 @@ public class CookingPot {
                     finishCooking();
                 }
             } else {
-                // Should not happen if startCooking works correctly, but safe guard
-                state = CookingState.BURNT;
+                // Dark Food Logic (Default 10s)
+                if (cookingTimer >= 200) {
+                    finishCooking();
+                }
             }
         }
     }
     
+    // Helper method to consume ingredients according to recipe requirements
+    private void consumeIngredients(CookingRecipe recipe) {
+        if (recipe == null) {
+            clearIngredients(); // Fallback for dark food/null recipe
+            return;
+        }
+
+        // We need to consume items that match the requirements.
+        // Strategy: Iterate requirements, find matching items in slots, decrement them.
+        for (Map.Entry<FoodTag, Integer> entry : recipe.getRequirements().entrySet()) {
+            FoodTag tag = entry.getKey();
+            int amountNeeded = entry.getValue();
+
+            for (int slot : INGREDIENT_SLOTS) {
+                if (amountNeeded <= 0) break;
+
+                ItemStack item = inventory.getItem(slot);
+                if (item == null || item.getType() == Material.AIR) continue;
+
+                if (plugin.getCookingManager().getItemTags(item).contains(tag)) {
+                    // Found a match
+                    int amount = item.getAmount();
+                    if (amount >= amountNeeded) {
+                        // Consume required amount
+                        item.setAmount(amount - amountNeeded);
+                        inventory.setItem(slot, item); // Update inventory (if 0, Spigot might handle it, but let's be safe)
+                        if (item.getAmount() <= 0) {
+                            inventory.setItem(slot, null);
+                        }
+                        amountNeeded = 0;
+                    } else {
+                        // Consume all of this item and continue
+                        amountNeeded -= amount;
+                        inventory.setItem(slot, null);
+                    }
+                }
+            }
+        }
+    }
+
     private void finishCooking() {
+        // 1. Generate Result
+        ItemStack result;
+        double qteScore = 0.0;
+        int finalStars = 1;
+
+        if (currentRecipe != null) {
+            // Calculate Score
+            int totalTime = currentRecipe.getCookingTime();
+            qteScore = (double) perfectCookingTicks / totalTime;
+            if (qteScore > 1.0) qteScore = 1.0;
+            
+            // Ingredient Stars
+            double totalStars = 0;
+            int count = 0;
+            NamespacedKey starKey = new NamespacedKey(plugin, "star_rating");
+            
+            for (ItemStack item : getIngredients()) {
+                if (item == null) continue;
+                int star = 1;
+                ItemMeta meta = item.getItemMeta();
+                if (meta != null && meta.getPersistentDataContainer().has(starKey, PersistentDataType.INTEGER)) {
+                    star = meta.getPersistentDataContainer().get(starKey, PersistentDataType.INTEGER);
+                }
+                totalStars += star;
+                count++;
+            }
+            double avgStars = count > 0 ? totalStars / count : 1.0;
+            
+            // Final Stars
+            double finalScore = (avgStars * 0.5) + (qteScore * 5.0 * 0.5);
+            finalStars = (int) Math.round(finalScore);
+            if (finalStars < 1) finalStars = 1;
+            if (finalStars > 5) finalStars = 5;
+            
+            // Create Result Item
+            result = currentRecipe.getResultTemplate().clone();
+            ItemMeta meta = result.getItemMeta();
+            
+            // Set PDC
+            meta.getPersistentDataContainer().set(starKey, PersistentDataType.INTEGER, finalStars);
+            
+            // Add Lore
+            List<Component> lore = meta.lore();
+            if (lore == null) lore = new ArrayList<>();
+            lore.add(Component.text(""));
+            lore.add(Component.text("§7品质: " + "⭐".repeat(finalStars)));
+            lore.add(Component.text("§8(QTE: " + String.format("%.0f%%", qteScore * 100) + ")"));
+            meta.lore(lore);
+            
+            result.setItemMeta(meta);
+            
+        } else {
+            // Dark Food
+            result = new ItemStack(Material.SUSPICIOUS_STEW);
+            ItemMeta meta = result.getItemMeta();
+            meta.displayName(Component.text("§8黑暗料理"));
+            List<Component> lore = new ArrayList<>();
+            lore.add(Component.text("§7散发着诡异的气息..."));
+            meta.lore(lore);
+            result.setItemMeta(meta);
+        }
+
+        // 2. Consume Ingredients
+        if (currentRecipe != null) {
+            consumeIngredients(currentRecipe);
+        } else {
+            // Dark Food: Consume 1 of each ingredient in the pot
+            for (int slot : INGREDIENT_SLOTS) {
+                ItemStack item = inventory.getItem(slot);
+                if (item != null && item.getType() != Material.AIR) {
+                    item.setAmount(item.getAmount() - 1);
+                    inventory.setItem(slot, item); // Update (Spigot handles 0->AIR)
+                }
+            }
+        }
+        
+        // Clear visuals for consumed ingredients and force refresh for remaining ones
+        clearVisuals(); 
+        updateVisuals(); 
+
+        // 3. Place Result in Output Slot
+        ItemStack existing = inventory.getItem(OUTPUT_SLOT);
+        if (existing == null || existing.getType() == Material.AIR) {
+            inventory.setItem(OUTPUT_SLOT, result);
+        } else {
+            // If output slot is occupied, drop item
+            location.getWorld().dropItem(location.clone().add(0, 1, 0), result);
+        }
+
+        // 4. Update State
         state = CookingState.FINISHED;
         isHeated = false; // Stop heating
         location.getWorld().playSound(location, Sound.BLOCK_NOTE_BLOCK_BELL, 1.0f, 1.0f); // Ding!
         location.getWorld().spawnParticle(Particle.HAPPY_VILLAGER, location.clone().add(0.5, 1.0, 0.5), 10, 0.3, 0.3, 0.3, 0.05);
+        
+        // Optional: Play toast sound for high quality
+        if (finalStars >= 4) {
+            location.getWorld().playSound(location, Sound.UI_TOAST_CHALLENGE_COMPLETE, 0.5f, 1.0f);
+        }
     }
     
     public void startCooking() {
@@ -443,78 +588,23 @@ public class CookingPot {
     public void retrieveResult(Player player) {
         if (state != CookingState.FINISHED && state != CookingState.BURNT) return;
         
-        ItemStack result;
-        double qteScore = 0.0;
-        
-        if (currentRecipe != null && state == CookingState.FINISHED) {
-            // Calculate Score
-            // QTE Score (0.0 - 1.0)
-            int totalTime = currentRecipe.getCookingTime();
-            qteScore = (double) perfectCookingTicks / totalTime;
-            if (qteScore > 1.0) qteScore = 1.0;
-            
-            // Ingredient Stars
-            double totalStars = 0;
-            int count = 0;
-            NamespacedKey starKey = new NamespacedKey(plugin, "star_rating");
-            
-            for (ItemStack item : getIngredients()) {
-                if (item == null) continue;
-                int star = 1;
-                ItemMeta meta = item.getItemMeta();
-                if (meta != null && meta.getPersistentDataContainer().has(starKey, PersistentDataType.INTEGER)) {
-                    star = meta.getPersistentDataContainer().get(starKey, PersistentDataType.INTEGER);
-                }
-                totalStars += star;
-                count++;
-            }
-            double avgStars = count > 0 ? totalStars / count : 1.0;
-            
-            // Final Stars = (Avg * 0.5) + (QTE * 5 * 0.5)
-            // Example: Avg 3, QTE 0.8 -> (1.5) + (4 * 0.5 = 2.0) = 3.5 -> 3 or 4
-            double finalScore = (avgStars * 0.5) + (qteScore * 5.0 * 0.5);
-            int finalStars = (int) Math.round(finalScore);
-            if (finalStars < 1) finalStars = 1;
-            if (finalStars > 5) finalStars = 5;
-            
-            // Create Result
-            result = currentRecipe.getResultTemplate();
-            ItemMeta meta = result.getItemMeta();
-            
-            // Set PDC
-            meta.getPersistentDataContainer().set(starKey, PersistentDataType.INTEGER, finalStars);
-            
-            // Add Lore
-            List<Component> lore = meta.lore();
-            if (lore == null) lore = new ArrayList<>();
-            lore.add(Component.text(""));
-            lore.add(Component.text("§7品质: " + "⭐".repeat(finalStars)));
-            lore.add(Component.text("§8(QTE: " + String.format("%.0f%%", qteScore * 100) + ")"));
-            meta.lore(lore);
-            
-            result.setItemMeta(meta);
-            
-            player.sendMessage("§a烹饪完成! 品质: " + finalStars + "⭐ (QTE: " + (int)(qteScore*100) + "%)");
-            
+        ItemStack output = inventory.getItem(OUTPUT_SLOT);
+        if (output != null && output.getType() != org.bukkit.Material.AIR) {
+            // Give to player
+            player.getInventory().addItem(output).forEach((idx, leftover) -> {
+                location.getWorld().dropItem(location, leftover);
+            });
+            inventory.setItem(OUTPUT_SLOT, null);
+            player.playSound(location, Sound.ENTITY_ITEM_PICKUP, 1.0f, 1.0f);
+            player.sendMessage("§a成功取出料理！");
         } else {
-            // Dark Food (Burnt or No Recipe)
-            result = new ItemStack(org.bukkit.Material.SUSPICIOUS_STEW);
-            ItemMeta meta = result.getItemMeta();
-            meta.displayName(Component.text("§8黑暗料理"));
-            List<Component> lore = new ArrayList<>();
-            lore.add(Component.text("§7散发着诡异的气息..."));
-            meta.lore(lore);
-            result.setItemMeta(meta);
-            
-            player.sendMessage("§c你获得了一份黑暗料理...");
+            // Already empty?
         }
         
-        // Give to player
-        location.getWorld().dropItem(location.clone().add(0, 1, 0), result);
-        
-        // Clear pot
-        clearIngredients();
-        location.getWorld().playSound(location, Sound.ENTITY_ITEM_PICKUP, 1.0f, 1.0f);
+        // Reset to IDLE if empty
+        if (!hasIngredients() && (inventory.getItem(OUTPUT_SLOT) == null)) {
+            state = CookingState.IDLE;
+        }
     }
 
     private int getFuelTime(org.bukkit.Material material) {
@@ -562,40 +652,31 @@ public class CookingPot {
         if (fill > totalBars) fill = totalBars;
         
         bar.append("§8[");
+        
+        // Determine thresholds
+        double minOpt = (currentRecipe != null) ? currentRecipe.getOptimalTempMin() : 100.0;
+        double maxOpt = (currentRecipe != null) ? currentRecipe.getOptimalTempMax() : 200.0;
+
         for (int i = 0; i < totalBars; i++) {
             double barTemp = i * tempPerBar;
             
-            // Determine color based on QTE Zone if cooking
-            String color = "§7"; // Default Empty
-            boolean isOptimal = false;
-            
-            if (currentRecipe != null) {
-                if (barTemp >= currentRecipe.getOptimalTempMin() && barTemp <= currentRecipe.getOptimalTempMax()) {
-                    isOptimal = true;
-                }
-            } else {
-                // Default logic if no recipe (e.g. preparing)
-                // 100-200 is generally good?
-            }
+            // Check if this segment represents an optimal zone
+            boolean isOptimalZone = (barTemp >= minOpt && barTemp <= maxOpt);
 
             if (i < fill) {
-                // Filled
-                if (currentRecipe != null) {
-                    if (barTemp < currentRecipe.getOptimalTempMin()) color = "§b"; // Cold
-                    else if (barTemp > currentRecipe.getOptimalTempMax()) color = "§c"; // Hot
-                    else color = "§a"; // Perfect
-                } else {
-                     if (temperature < 100) color = "§b";
-                     else if (temperature < 200) color = "§a";
-                     else color = "§c";
-                }
+                // Filled Bar
+                String color;
+                if (barTemp < minOpt) color = "§b"; // Cold (Blue)
+                else if (barTemp > maxOpt) color = "§c"; // Hot (Red)
+                else color = "§a"; // Optimal (Green)
+                
                 bar.append(color).append("|");
             } else {
-                // Empty
-                if (currentRecipe != null && isOptimal) {
-                     bar.append("§2."); // Dark Green for target zone
+                // Empty Bar
+                if (isOptimalZone) {
+                    bar.append("§2."); // Dark Green marker for target zone
                 } else {
-                     bar.append("§8.");
+                    bar.append("§8."); // Grey for others
                 }
             }
         }

@@ -59,10 +59,15 @@ public class CookingManager {
         registerTag(Material.COD, FoodTag.FISH, FoodTag.MEAT);
         registerTag(Material.SALMON, FoodTag.FISH, FoodTag.MEAT);
         registerTag(Material.TROPICAL_FISH, FoodTag.FISH, FoodTag.MEAT);
+        registerTag(Material.PUFFERFISH, FoodTag.FISH, FoodTag.MEAT);
+        registerTag(Material.COOKED_COD, FoodTag.FISH, FoodTag.MEAT);
+        registerTag(Material.COOKED_SALMON, FoodTag.FISH, FoodTag.MEAT);
         
         // Misc
         registerTag(Material.EGG, FoodTag.EGG);
         registerTag(Material.MILK_BUCKET, FoodTag.DAIRY, FoodTag.LIQUID);
+        registerTag(Material.WATER_BUCKET, FoodTag.LIQUID);
+        registerTag(Material.POTION, FoodTag.LIQUID);
         registerTag(Material.SUGAR, FoodTag.SPICE);
         registerTag(Material.BROWN_MUSHROOM, FoodTag.MUSHROOM, FoodTag.VEGGIE);
         registerTag(Material.RED_MUSHROOM, FoodTag.MUSHROOM, FoodTag.VEGGIE);
@@ -77,32 +82,32 @@ public class CookingManager {
      */
     private void initializeRecipes() {
         // Tier 1: 简单的烤肉/炖菜
-        // 炖肉 (Stew): 2肉 + 1蔬菜 (10s, 80-150°C)
+        // 炖肉 (Stew): 2肉 + 1蔬菜 (20s, 80-150°C)
         Map<FoodTag, Integer> stewReq = new HashMap<>();
         stewReq.put(FoodTag.MEAT, 2);
         stewReq.put(FoodTag.VEGGIE, 1);
-        registerRecipe(new CookingRecipe("simple_stew", "家常炖肉", 1, stewReq, createResult(Material.RABBIT_STEW, "§f家常炖肉"), 200, 80.0, 150.0));
+        registerRecipe(new CookingRecipe("simple_stew", "家常炖肉", 1, stewReq, createResult(Material.RABBIT_STEW, "§f家常炖肉"), 400, 80.0, 150.0));
 
-        // 蔬菜汤 (Veggie Soup): 2蔬菜 + 1液体 (8s, 70-130°C)
+        // 蔬菜汤 (Veggie Soup): 2蔬菜 + 1液体 (16s, 70-130°C)
         Map<FoodTag, Integer> soupReq = new HashMap<>();
         soupReq.put(FoodTag.VEGGIE, 2);
         soupReq.put(FoodTag.LIQUID, 1);
-        registerRecipe(new CookingRecipe("veggie_soup", "清淡蔬菜汤", 1, soupReq, createResult(Material.BEETROOT_SOUP, "§f清淡蔬菜汤"), 160, 70.0, 130.0));
+        registerRecipe(new CookingRecipe("veggie_soup", "清淡蔬菜汤", 1, soupReq, createResult(Material.BEETROOT_SOUP, "§f清淡蔬菜汤"), 320, 70.0, 130.0));
 
         // Tier 2: 复合料理
-        // 牧羊人派 (Shepherds Pie): 2淀粉 + 2肉 + 1蔬菜 (20s, 150-250°C)
+        // 牧羊人派 (Shepherds Pie): 2淀粉 + 2肉 + 1蔬菜 (40s, 150-250°C)
         Map<FoodTag, Integer> pieReq = new HashMap<>();
         pieReq.put(FoodTag.STARCH, 2);
         pieReq.put(FoodTag.MEAT, 2);
         pieReq.put(FoodTag.VEGGIE, 1);
-        registerRecipe(new CookingRecipe("shepherds_pie", "牧羊人派", 2, pieReq, createResult(Material.PUMPKIN_PIE, "§6牧羊人派"), 400, 150.0, 250.0));
+        registerRecipe(new CookingRecipe("shepherds_pie", "牧羊人派", 2, pieReq, createResult(Material.PUMPKIN_PIE, "§6牧羊人派"), 800, 150.0, 250.0));
         
-        // 海陆大餐 (Surf and Turf): 1肉 + 1鱼 + 1淀粉 (15s, 120-200°C)
+        // 海陆大餐 (Surf and Turf): 1肉 + 1鱼 + 1淀粉 (30s, 120-200°C)
         Map<FoodTag, Integer> surfReq = new HashMap<>();
         surfReq.put(FoodTag.MEAT, 1);
         surfReq.put(FoodTag.FISH, 1);
         surfReq.put(FoodTag.STARCH, 1);
-        registerRecipe(new CookingRecipe("surf_and_turf", "海陆大餐", 2, surfReq, createResult(Material.COOKED_SALMON, "§b海陆大餐"), 300, 120.0, 200.0));
+        registerRecipe(new CookingRecipe("surf_and_turf", "海陆大餐", 2, surfReq, createResult(Material.COOKED_SALMON, "§b海陆大餐"), 600, 120.0, 200.0));
     }
     
     private void registerRecipe(CookingRecipe recipe) {

@@ -9,9 +9,6 @@ import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.InventoryHolder;
 import org.bukkit.inventory.ItemStack;
 
-import java.util.ArrayList;
-import java.util.List;
-
 public class CookingPotInventory implements InventoryHolder {
 
     private final CookingPot pot;
@@ -57,25 +54,12 @@ public class CookingPotInventory implements InventoryHolder {
         inventory.setItem(23, arrow);
     }
 
+    // updateIngredientsFromView removed as it caused state reset bugs
+    /*
     public void updateIngredientsFromView() {
-        // Sync inventory back to pot ingredients
-        // 1. Read items first (before clearing!)
-        List<ItemStack> itemsToSave = new ArrayList<>();
-        for (int slot : CookingPot.INGREDIENT_SLOTS) {
-            ItemStack item = inventory.getItem(slot);
-            if (item != null && item.getType() != Material.AIR) {
-                itemsToSave.add(item);
-            }
-        }
-        
-        // 2. Clear pot logic
-        pot.clearIngredients();
-        
-        // 3. Add back
-        for (ItemStack item : itemsToSave) {
-            pot.addIngredientDirectly(item);
-        }
+        // ...
     }
+    */
 
     @Override
     public Inventory getInventory() {
@@ -120,7 +104,7 @@ public class CookingPotInventory implements InventoryHolder {
     }
     
     public void handleClose(InventoryCloseEvent event) {
-        updateIngredientsFromView();
+        // updateIngredientsFromView(); // Removed
         pot.updateVisuals(); // Refresh visuals on pot
     }
 }
