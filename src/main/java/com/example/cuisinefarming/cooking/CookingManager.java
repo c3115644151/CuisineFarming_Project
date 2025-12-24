@@ -3,8 +3,6 @@ package com.example.cuisinefarming.cooking;
 import com.example.cuisinefarming.CuisineFarming;
 import org.bukkit.Material;
 import org.bukkit.inventory.ItemStack;
-import org.bukkit.inventory.meta.ItemMeta;
-import net.kyori.adventure.text.Component;
 
 import java.util.*;
 
@@ -14,6 +12,7 @@ import java.util.*;
  */
 public class CookingManager {
 
+    private final CuisineFarming plugin;
     // 物品材质 -> 标签集合 (一个物品可能有多个标签)
     private final Map<Material, Set<FoodTag>> materialTags = new HashMap<>();
     
@@ -21,6 +20,7 @@ public class CookingManager {
     private final List<CookingRecipe> recipes = new ArrayList<>();
 
     public CookingManager(CuisineFarming plugin) {
+        this.plugin = plugin;
         initializeTags();
         initializeRecipes();
     }
@@ -81,45 +81,83 @@ public class CookingManager {
      * 初始化默认食谱
      */
     private void initializeRecipes() {
-        // Tier 1: 简单的烤肉/炖菜
-        // 炖肉 (Stew): 2肉 + 1蔬菜 (20s, 80-150°C)
+        // --- Tier 1: 饱食 (Sustenance) ---
+        // 家常炖肉 (Simple Stew): 2肉 + 1蔬菜 (20s, 80-150°C)
         Map<FoodTag, Integer> stewReq = new HashMap<>();
         stewReq.put(FoodTag.MEAT, 2);
         stewReq.put(FoodTag.VEGGIE, 1);
-        registerRecipe(new CookingRecipe("simple_stew", "家常炖肉", 1, stewReq, createResult(Material.RABBIT_STEW, "§f家常炖肉"), 400, 80.0, 150.0));
+        registerRecipe(new CookingRecipe("simple_stew", "家常炖肉", 1, stewReq, plugin.getItemManager().getItem("SIMPLE_STEW"), 400, 80.0, 150.0));
 
         // 蔬菜汤 (Veggie Soup): 2蔬菜 + 1液体 (16s, 70-130°C)
         Map<FoodTag, Integer> soupReq = new HashMap<>();
         soupReq.put(FoodTag.VEGGIE, 2);
         soupReq.put(FoodTag.LIQUID, 1);
-        registerRecipe(new CookingRecipe("veggie_soup", "清淡蔬菜汤", 1, soupReq, createResult(Material.BEETROOT_SOUP, "§f清淡蔬菜汤"), 320, 70.0, 130.0));
+        registerRecipe(new CookingRecipe("veggie_soup", "清淡蔬菜汤", 1, soupReq, plugin.getItemManager().getItem("VEGGIE_SOUP"), 320, 70.0, 130.0));
 
-        // Tier 2: 复合料理
-        // 牧羊人派 (Shepherds Pie): 2淀粉 + 2肉 + 1蔬菜 (40s, 150-250°C)
+        // 酥脆炸鱼 (Crispy Fish): 1鱼 + 1淀粉 + 1香料 (20s, 160-220°C)
+        Map<FoodTag, Integer> fishReq = new HashMap<>();
+        fishReq.put(FoodTag.FISH, 1);
+        fishReq.put(FoodTag.STARCH, 1);
+        fishReq.put(FoodTag.SPICE, 1);
+        registerRecipe(new CookingRecipe("crispy_fish", "酥脆炸鱼", 1, fishReq, plugin.getItemManager().getItem("CRISPY_FISH"), 400, 160.0, 220.0));
+
+        // 农夫早餐 (Farmer's Breakfast): 1蛋 + 1淀粉 + 1乳制品 (15s, 60-120°C)
+        Map<FoodTag, Integer> breakfastReq = new HashMap<>();
+        breakfastReq.put(FoodTag.EGG, 1);
+        breakfastReq.put(FoodTag.STARCH, 1);
+        breakfastReq.put(FoodTag.DAIRY, 1);
+        registerRecipe(new CookingRecipe("farmers_breakfast", "农夫早餐", 1, breakfastReq, plugin.getItemManager().getItem("FARMERS_BREAKFAST"), 300, 60.0, 120.0));
+
+        // --- Tier 2: 效能 (Utility) ---
+        // 矿工特饮 (Miner's Tonic): 1液体 + 1水果 + 1香料 (10s, 40-90°C)
+        Map<FoodTag, Integer> minerReq = new HashMap<>();
+        minerReq.put(FoodTag.LIQUID, 1);
+        minerReq.put(FoodTag.FRUIT, 1);
+        minerReq.put(FoodTag.SPICE, 1);
+        registerRecipe(new CookingRecipe("miners_tonic", "矿工特饮", 2, minerReq, plugin.getItemManager().getItem("MINERS_TONIC"), 200, 40.0, 90.0));
+
+        // 牧羊人派 (Shepherd's Pie): 2淀粉 + 2肉 + 1蔬菜 (40s, 150-250°C)
         Map<FoodTag, Integer> pieReq = new HashMap<>();
         pieReq.put(FoodTag.STARCH, 2);
         pieReq.put(FoodTag.MEAT, 2);
         pieReq.put(FoodTag.VEGGIE, 1);
-        registerRecipe(new CookingRecipe("shepherds_pie", "牧羊人派", 2, pieReq, createResult(Material.PUMPKIN_PIE, "§6牧羊人派"), 800, 150.0, 250.0));
+        registerRecipe(new CookingRecipe("shepherds_pie", "牧羊人派", 2, pieReq, plugin.getItemManager().getItem("SHEPHERDS_PIE"), 800, 150.0, 250.0));
         
         // 海陆大餐 (Surf and Turf): 1肉 + 1鱼 + 1淀粉 (30s, 120-200°C)
         Map<FoodTag, Integer> surfReq = new HashMap<>();
         surfReq.put(FoodTag.MEAT, 1);
         surfReq.put(FoodTag.FISH, 1);
         surfReq.put(FoodTag.STARCH, 1);
-        registerRecipe(new CookingRecipe("surf_and_turf", "海陆大餐", 2, surfReq, createResult(Material.COOKED_SALMON, "§b海陆大餐"), 600, 120.0, 200.0));
+        registerRecipe(new CookingRecipe("surf_and_turf", "海陆大餐", 2, surfReq, plugin.getItemManager().getItem("SURF_AND_TURF"), 600, 120.0, 200.0));
+
+        // 辛辣咖喱 (Spicy Curry): 1肉 + 1蔬菜 + 1香料 (30s, 100-180°C)
+        Map<FoodTag, Integer> curryReq = new HashMap<>();
+        curryReq.put(FoodTag.MEAT, 1);
+        curryReq.put(FoodTag.VEGGIE, 1);
+        curryReq.put(FoodTag.SPICE, 1);
+        registerRecipe(new CookingRecipe("spicy_curry", "辛辣咖喱", 2, curryReq, plugin.getItemManager().getItem("SPICY_CURRY"), 600, 100.0, 180.0));
+
+        // --- Tier 3: 珍馐 (Delicacy) ---
+        // 智慧浓汤 (Wisdom Broth): 1蘑菇 + 1蔬菜 + 1乳制品 + 1香料 (50s, 90-140°C)
+        Map<FoodTag, Integer> wisdomReq = new HashMap<>();
+        wisdomReq.put(FoodTag.MUSHROOM, 1);
+        wisdomReq.put(FoodTag.VEGGIE, 1);
+        wisdomReq.put(FoodTag.DAIRY, 1);
+        wisdomReq.put(FoodTag.SPICE, 1);
+        registerRecipe(new CookingRecipe("wisdom_broth", "智慧浓汤", 3, wisdomReq, plugin.getItemManager().getItem("WISDOM_BROTH"), 1000, 90.0, 140.0));
+
+        // 皇家盛宴 (Royal Feast): 2肉 + 1鱼 + 1水果 + 1乳制品 + 1淀粉 (60s, 140-220°C)
+        Map<FoodTag, Integer> royalReq = new HashMap<>();
+        royalReq.put(FoodTag.MEAT, 2);
+        royalReq.put(FoodTag.FISH, 1);
+        royalReq.put(FoodTag.FRUIT, 1);
+        royalReq.put(FoodTag.DAIRY, 1);
+        royalReq.put(FoodTag.STARCH, 1);
+        registerRecipe(new CookingRecipe("royal_feast", "皇家盛宴", 3, royalReq, plugin.getItemManager().getItem("ROYAL_FEAST"), 1200, 140.0, 220.0));
     }
     
     private void registerRecipe(CookingRecipe recipe) {
         recipes.add(recipe);
-    }
-
-    private ItemStack createResult(Material type, String name) {
-        ItemStack item = new ItemStack(type);
-        ItemMeta meta = item.getItemMeta();
-        meta.displayName(Component.text(name));
-        item.setItemMeta(meta);
-        return item;
     }
 
     /**

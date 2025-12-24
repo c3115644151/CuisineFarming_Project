@@ -437,22 +437,45 @@ public class CookingPot {
             if (finalStars < 1) finalStars = 1;
             if (finalStars > 5) finalStars = 5;
             
-            // Create Result Item
-            result = currentRecipe.getResultTemplate().clone();
-            ItemMeta meta = result.getItemMeta();
-            
-            // Set PDC
-            meta.getPersistentDataContainer().set(starKey, PersistentDataType.INTEGER, finalStars);
-            
-            // Add Lore
-            List<Component> lore = meta.lore();
-            if (lore == null) lore = new ArrayList<>();
-            lore.add(Component.text(""));
-            lore.add(Component.text("§7品质: " + "⭐".repeat(finalStars)));
-            lore.add(Component.text("§8(QTE: " + String.format("%.0f%%", qteScore * 100) + ")"));
-            meta.lore(lore);
-            
-            result.setItemMeta(meta);
+            // 1-Star Result -> Dark Food (Mystery Stew)
+            if (finalStars == 1) {
+                result = new ItemStack(Material.SUSPICIOUS_STEW);
+                ItemMeta meta = result.getItemMeta();
+                meta.displayName(Component.text("§8黑暗料理 (1⭐)"));
+                List<Component> lore = new ArrayList<>();
+                lore.add(Component.text("§7原本是: " + currentRecipe.getDisplayName()));
+                lore.add(Component.text("§7但现在它只是一团不可名状的物质..."));
+                meta.lore(lore);
+                result.setItemMeta(meta);
+                
+                location.getWorld().playSound(location, Sound.ENTITY_VILLAGER_NO, 1.0f, 1.0f);
+            } else {
+                // Create Result Item
+                result = currentRecipe.getResultTemplate().clone();
+                ItemMeta meta = result.getItemMeta();
+                
+                // Set PDC
+                meta.getPersistentDataContainer().set(starKey, PersistentDataType.INTEGER, finalStars);
+                
+                // Add Lore
+                List<Component> lore = meta.lore();
+                if (lore == null) lore = new ArrayList<>();
+                lore.add(Component.text(""));
+                lore.add(Component.text("§7品质: " + "⭐".repeat(finalStars)));
+                lore.add(Component.text("§8(QTE: " + String.format("%.0f%%", qteScore * 100) + ")"));
+                
+                // 5-Star Special Lore
+                if (finalStars == 5) {
+                    String flavorText = getFiveStarLore(currentRecipe.getId());
+                    if (flavorText != null) {
+                        lore.add(Component.text(""));
+                        lore.add(Component.text("§6§o\"" + flavorText + "\""));
+                    }
+                }
+                
+                meta.lore(lore);
+                result.setItemMeta(meta);
+            }
             
         } else {
             // Dark Food
@@ -550,6 +573,22 @@ public class CookingPot {
         location.getWorld().playSound(location, Sound.ITEM_FIRECHARGE_USE, 1.0f, 1.0f);
         location.getWorld().spawnParticle(Particle.FLAME, location.clone().add(0.5, 0.2, 0.5), 5, 0.2, 0.2, 0.2, 0.05);
         location.getWorld().spawnParticle(Particle.SMOKE, location.clone().add(0.5, 0.5, 0.5), 5, 0.2, 0.2, 0.2, 0.05);
+    }
+
+    private String getFiveStarLore(String key) {
+        switch (key) {
+            case "simple_stew": return "妈妈的味道...不对，这是神厨的味道！";
+            case "veggie_soup": return "这一碗下去，感觉身体被净化了。";
+            case "crispy_fish": return "外酥里嫩，连骨头都炸得酥脆！";
+            case "farmers_breakfast": return "美好的一天，从这顿完美的早餐开始。";
+            case "miners_tonic": return "这一口下去，基岩都能挖穿！";
+            case "shepherds_pie": return "这就叫扎实！这就是力量！";
+            case "surf_and_turf": return "山珍海味，尽在掌握。";
+            case "spicy_curry": return "燃烧吧，我的卡路里！";
+            case "wisdom_broth": return "甚至能感觉到宇宙的真理在脑海中回响。";
+            case "royal_feast": return "只有真正的王者才配享用这等盛宴。";
+            default: return null;
+        }
     }
     
     public void cool(double amount) {

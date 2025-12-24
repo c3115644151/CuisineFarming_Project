@@ -42,7 +42,34 @@ public class CuisineItemManager {
         // 烹饪 - 容器
         registerItem("COOKING_POT", Material.CAULDRON, "厨锅", 20008, "§7一口厚实的铁锅。", "§e放置在营火上方使用。", "§6用途: 烹饪食物");
 
+        // --- 烹饪成品 (Foods) ---
+        // Tier 1: 饱食 (Sustenance) - 高饱食度，性价比高
+        registerFood("SIMPLE_STEW", Material.RABBIT_STEW, "家常炖肉", 20101, 1, "§f基础料理", "§7普通的炖肉，管饱。", "§a恢复大量饱食度(16)");
+        registerFood("VEGGIE_SOUP", Material.BEETROOT_SOUP, "清淡蔬菜汤", 20102, 1, "§f基础料理", "§7适合素食者。", "§a恢复中等饱食度(10)");
+        registerFood("CRISPY_FISH", Material.COOKED_COD, "酥脆炸鱼", 20103, 1, "§f基础料理", "§7外酥里嫩。", "§a恢复中等饱食度(12)");
+        registerFood("FARMERS_BREAKFAST", Material.BREAD, "农夫早餐", 20104, 1, "§f基础料理", "§7开启活力满满的一天。", "§a恢复大量饱食度(14)");
+
+        // Tier 2: 效能 (Utility) - 提供 Buff
+        registerFood("MINERS_TONIC", Material.HONEY_BOTTLE, "矿工特饮", 20201, 2, "§b功能饮料", "§7富含矿物质。", "§b效果: 急迫 & 夜视 (3分钟)");
+        registerFood("SHEPHERDS_PIE", Material.PUMPKIN_PIE, "牧羊人派", 20202, 2, "§b经典美食", "§7一层肉一层土豆泥。", "§b效果: 伤害吸收 II (5分钟)");
+        registerFood("SURF_AND_TURF", Material.COOKED_SALMON, "海陆大餐", 20203, 2, "§b经典美食", "§7山珍海味的完美结合。", "§b效果: 力量 I (3分钟)");
+        registerFood("SPICY_CURRY", Material.MUSHROOM_STEW, "辛辣咖喱", 20204, 2, "§b异域风情", "§7辣得过瘾！", "§b效果: 抗火 (10分钟)");
+
+        // Tier 3: 珍馐 (Delicacy) - 永久增益/特殊效果
+        registerFood("WISDOM_BROTH", Material.MUSHROOM_STEW, "智慧浓汤", 20301, 3, "§d传说料理", "§7据说能让人变聪明。", "§d效果: 获得经验值 (150XP)");
+        registerFood("ROYAL_FEAST", Material.CAKE, "皇家盛宴", 20302, 3, "§d传说料理", "§7足以招待国王的宴席。", "§d效果: 全员恢复 + 饱和 (范围光环)");
+
         plugin.getLogger().info("Registered " + customItems.size() + " cuisine items.");
+    }
+
+    private void registerFood(String key, Material material, String name, int modelData, int tier, String type, String desc, String effect) {
+        String tierStr = "";
+        switch (tier) {
+            case 1: tierStr = "§a[Tier 1: 饱食]"; break;
+            case 2: tierStr = "§b[Tier 2: 效能]"; break;
+            case 3: tierStr = "§d[Tier 3: 珍馐]"; break;
+        }
+        registerItem(key, material, name, modelData, tierStr, type, desc, effect);
     }
 
     private void registerItem(String key, Material material, String name, int modelData, String... loreLines) {

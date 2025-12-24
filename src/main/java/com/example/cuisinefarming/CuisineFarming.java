@@ -34,6 +34,7 @@ public class CuisineFarming extends JavaPlugin {
         this.farmingListener = new FarmingListener(this);
         new com.example.cuisinefarming.listeners.PollinationListener(this, pollinationManager);
         new com.example.cuisinefarming.cooking.CookingPotListener(this); // Register CookingPotListener
+        new com.example.cuisinefarming.listeners.FoodConsumeListener(this); // Register FoodConsumeListener
         getServer().getPluginManager().registerEvents(new SeedAnalyzerListener(this), this);
         
         // Register Commands
