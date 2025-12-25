@@ -1,7 +1,7 @@
 package com.example.cuisinefarming.listeners;
 
 import com.example.cuisinefarming.CuisineFarming;
-import com.example.cuisinefarming.gui.SeedAnalyzerGUI;
+import com.example.cuisinefarming.gui.GeneticAnalyzerGUI;
 import net.kyori.adventure.text.Component;
 import org.bukkit.Chunk;
 import org.bukkit.Material;
@@ -36,7 +36,7 @@ public class SeedAnalyzerListener implements Listener {
         if (plugin.getItemManager().isCustomItem(item, "SEED_ANALYZER")) {
             Block block = event.getBlockPlaced();
             addAnalyzer(block);
-            event.getPlayer().sendMessage(Component.text("§a[Cuisine] §f种子分析仪已就绪！右键即可使用。"));
+            event.getPlayer().sendMessage(Component.text("§a[Cuisine] §f遗传分析仪已就绪！右键即可使用。"));
         }
     }
 
@@ -49,7 +49,7 @@ public class SeedAnalyzerListener implements Listener {
         // Ensure we only check Iron Blocks to be safe
         if (block.getType() == Material.IRON_BLOCK && isAnalyzer(block)) {
             event.setCancelled(true);
-            new SeedAnalyzerGUI(plugin, event.getPlayer()).open();
+            new GeneticAnalyzerGUI(plugin, event.getPlayer()).open();
         }
     }
 

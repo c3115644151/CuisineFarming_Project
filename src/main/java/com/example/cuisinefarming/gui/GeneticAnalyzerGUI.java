@@ -6,6 +6,7 @@ import com.example.cuisinefarming.genetics.GeneticsManager;
 import net.kyori.adventure.text.Component;
 import org.bukkit.Bukkit;
 import org.bukkit.Material;
+import org.bukkit.NamespacedKey;
 import org.bukkit.Sound;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
@@ -17,12 +18,15 @@ import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.InventoryHolder;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.ItemMeta;
+import org.bukkit.persistence.PersistentDataType;
+import org.bukkit.plugin.Plugin;
 import org.bukkit.scheduler.BukkitRunnable;
 
+import java.lang.reflect.Method;
 import java.util.ArrayList;
 import java.util.List;
 
-public class SeedAnalyzerGUI implements InventoryHolder, Listener {
+public class GeneticAnalyzerGUI implements InventoryHolder, Listener {
 
     private final CuisineFarming plugin;
     private final Inventory inventory;
@@ -34,10 +38,10 @@ public class SeedAnalyzerGUI implements InventoryHolder, Listener {
     private static final int SLOT_OUTPUT = 16;
     private static final int GUI_SIZE = 27;
 
-    public SeedAnalyzerGUI(CuisineFarming plugin, Player player) {
+    public GeneticAnalyzerGUI(CuisineFarming plugin, Player player) {
         this.plugin = plugin;
         this.player = player;
-        this.inventory = Bukkit.createInventory(this, GUI_SIZE, Component.text("§8种子分析仪 (Seed Analyzer)"));
+        this.inventory = Bukkit.createInventory(this, GUI_SIZE, Component.text("§8遗传分析仪 (Genetic Analyzer)"));
         initializeItems();
         
         // Register this instance as a listener temporarily
@@ -78,7 +82,7 @@ public class SeedAnalyzerGUI implements InventoryHolder, Listener {
         switch (state) {
             case READY:
                 button = new ItemStack(Material.LIME_STAINED_GLASS_PANE);
-                setMeta(button, "§a[点击分析] §7(Click to Analyze)", "§7消耗1个未鉴定种子");
+                setMeta(button, "§a[点击分析] §7(Click to Analyze)", "§7消耗1个未鉴定样本");
                 break;
             case PROCESSING:
                 button = new ItemStack(Material.YELLOW_STAINED_GLASS_PANE);
@@ -91,7 +95,7 @@ public class SeedAnalyzerGUI implements InventoryHolder, Listener {
             case IDLE:
             default:
                 button = new ItemStack(Material.RED_STAINED_GLASS_PANE);
-                setMeta(button, "§c[等待输入] §7(Waiting for Seed)", "§7请在左侧放入未鉴定种子");
+                setMeta(button, "§c[等待输入] §7(Waiting for Input)", "§7请在左侧放入未鉴定种子或DNA样本");
                 break;
         }
         inventory.setItem(SLOT_BUTTON, button);
@@ -133,7 +137,7 @@ public class SeedAnalyzerGUI implements InventoryHolder, Listener {
         // Handle Button Click
         if (slot == SLOT_BUTTON) {
             ItemStack input = inventory.getItem(SLOT_INPUT);
-            if (isValidSeed(input)) {
+            if (isValidInput(input)) {
                 startAnalysis(input);
             } else {
                 player.playSound(player.getLocation(), Sound.BLOCK_NOTE_BLOCK_BASS, 1f, 0.5f);
@@ -184,7 +188,7 @@ public class SeedAnalyzerGUI implements InventoryHolder, Listener {
         ItemStack input = inventory.getItem(SLOT_INPUT);
         ItemStack output = inventory.getItem(SLOT_OUTPUT);
         
-        if (isValidSeed(input)) {
+        if (isValidInput(input)) {
             if (output == null || output.getType() == Material.AIR) {
                 updateButton(ButtonState.READY);
             } else {
@@ -195,18 +199,44 @@ public class SeedAnalyzerGUI implements InventoryHolder, Listener {
         }
     }
     
-    private boolean isValidSeed(ItemStack item) {
+    private boolean isValidInput(ItemStack item) {
         if (item == null || item.getType() == Material.AIR) return false;
-        if (!item.getType().toString().contains("SEEDS") && item.getType() != Material.POTATO && item.getType() != Material.CARROT) {
-             // Basic check, better to use GeneticsManager.isCrop
-             return false;
+        
+        // Check 1: CuisineFarming Seeds
+        boolean isSeed = item.getType().toString().contains("SEEDS") || item.getType() == Material.POTATO || item.getType() == Material.CARROT;
+        if (isSeed) {
+            GeneticsManager geneticsManager = plugin.getGeneticsManager();
+            GeneData genes = geneticsManager.getGenesFromItem(item);
+            // Only accept unidentified seeds
+            return genes == null || !genes.isIdentified();
         }
         
-        GeneticsManager geneticsManager = plugin.getGeneticsManager();
-        GeneData genes = geneticsManager.getGenesFromItem(item);
+        // Check 2: PastureSong DNA Sample
+        if (isPastureSongSample(item)) {
+             return isPastureSongUnidentified(item);
+        }
         
-        // Only accept unidentified seeds
-        return genes == null || !genes.isIdentified();
+        return false;
+    }
+    
+    private boolean isPastureSongSample(ItemStack item) {
+        if (item.getType() != Material.PAPER) return false;
+        Plugin pastureSong = Bukkit.getPluginManager().getPlugin("PastureSong");
+        if (pastureSong == null) return false;
+        
+        NamespacedKey key = new NamespacedKey(pastureSong, "gene_identified");
+        if (item.getItemMeta() == null) return false;
+        return item.getItemMeta().getPersistentDataContainer().has(key, PersistentDataType.BYTE);
+    }
+
+    private boolean isPastureSongUnidentified(ItemStack item) {
+        Plugin pastureSong = Bukkit.getPluginManager().getPlugin("PastureSong");
+        if (pastureSong == null) return false;
+        NamespacedKey key = new NamespacedKey(pastureSong, "gene_identified");
+        if (item.getItemMeta() == null) return false;
+        Byte val = item.getItemMeta().getPersistentDataContainer().get(key, PersistentDataType.BYTE);
+        // In PastureSong, 0 means unidentified, 1 means identified.
+        return val != null && val == 0;
     }
     
     private void startAnalysis(ItemStack input) {
@@ -239,7 +269,54 @@ public class SeedAnalyzerGUI implements InventoryHolder, Listener {
         }.runTaskTimer(plugin, 0, 2);
     }
     
-    private void completeAnalysis(ItemStack seedItem) {
+    private void completeAnalysis(ItemStack item) {
+        if (isPastureSongSample(item)) {
+            analyzePastureSongItem(item);
+        } else {
+            analyzeCuisineFarmingItem(item);
+        }
+    }
+    
+    private void analyzePastureSongItem(ItemStack item) {
+        try {
+            Plugin psPlugin = Bukkit.getPluginManager().getPlugin("PastureSong");
+            if (psPlugin == null) return;
+            
+            // Get GeneticsManager via reflection from PastureSong main class
+            // Assuming PastureSong has public getGeneticsManager()
+            Method getGeneticsManagerMethod = psPlugin.getClass().getMethod("getGeneticsManager");
+            Object geneticsManager = getGeneticsManagerMethod.invoke(psPlugin);
+            
+            // Get getGenesFromItem method
+            Method getGenesMethod = geneticsManager.getClass().getMethod("getGenesFromItem", ItemStack.class);
+            Object geneData = getGenesMethod.invoke(geneticsManager, item);
+            
+            // Set identified = true
+            Method setIdentifiedMethod = geneData.getClass().getMethod("setIdentified", boolean.class);
+            setIdentifiedMethod.invoke(geneData, true);
+            
+            // Save genes back
+            Method saveGenesMethod = geneticsManager.getClass().getMethod("saveGenesToItem", ItemStack.class, geneData.getClass());
+            saveGenesMethod.invoke(geneticsManager, item, geneData);
+            
+            // Update Lore
+            Method updateLoreMethod = geneticsManager.getClass().getMethod("updateGeneLore", ItemStack.class, geneData.getClass());
+            updateLoreMethod.invoke(geneticsManager, item, geneData);
+            
+            inventory.setItem(SLOT_OUTPUT, item);
+            updateButton(ButtonState.IDLE);
+            player.playSound(player.getLocation(), Sound.ENTITY_PLAYER_LEVELUP, 1f, 1.0f);
+            player.sendMessage(Component.text("§a[Genetics] §fDNA 样本鉴定成功！"));
+            
+            checkState();
+            
+        } catch (Exception e) {
+            e.printStackTrace();
+            player.sendMessage(Component.text("§c[Error] 无法分析该样本，请联系管理员。"));
+        }
+    }
+    
+    private void analyzeCuisineFarmingItem(ItemStack seedItem) {
         GeneticsManager geneticsManager = plugin.getGeneticsManager();
         
         // 1. Get existing or create new genes
@@ -272,7 +349,4 @@ public class SeedAnalyzerGUI implements InventoryHolder, Listener {
         
         checkState(); // Re-check button state
     }
-    
-    // Legacy helper removed in favor of GeneticsManager
-
 }
