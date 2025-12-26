@@ -57,7 +57,10 @@ public class DebugListener implements Listener {
         SET_CONC_HIGH("Set Soil: High (设置高肥 150)"),
         SET_CONC_TOXIC("Set Soil: Toxic (设置毒性 250)"),
         SIMULATE_HARVEST("Simulate: Harvest (模拟收割计算)"),
-        TEST_RECIPE_MATCH("Test: Recipe Match (测试食谱匹配)");
+        TEST_RECIPE_MATCH("Test: Recipe Match (测试食谱匹配)"),
+        
+        // PastureSong Integration
+        PASTURE_DEBUG("PS: Debug Tools (牧野之歌调试)");
         
         final String desc;
         DebugMode(String desc) { this.desc = desc; }
@@ -174,6 +177,10 @@ public class DebugListener implements Listener {
 
             case TEST_RECIPE_MATCH:
                 testRecipeMatch(player);
+                break;
+                
+            case PASTURE_DEBUG:
+                handlePastureDebug(player);
                 break;
         }
     }
@@ -751,5 +758,35 @@ public class DebugListener implements Listener {
             }
         }
         return result;
+    }
+
+    private void handlePastureDebug(Player player) {
+        if (player.isSneaking()) {
+            player.sendMessage(Component.text("§e[PS] §fGiving PastureSong Tools..."));
+            player.performCommand("ps get GENETIC_LENS");
+            player.performCommand("ps get DNA_SAMPLER");
+            player.performCommand("ps get PASTURE_SHEARS");
+            return;
+        }
+        
+        player.performCommand("ps debug info");
+        player.sendMessage(Component.text("§8§m--------------------------------"));
+        player.sendMessage(Component.text("§b[牧野之歌调试快捷操作]"));
+        player.sendMessage(Component.text("§7(点击下方文字执行)"));
+        
+        sendClickableCommand(player, "§c[增加应激 +10]", "/ps debug stress 10");
+        sendClickableCommand(player, "§a[清空应激]", "/ps debug stress 0");
+        sendClickableCommand(player, "§c[强制感染]", "/ps debug infect");
+        sendClickableCommand(player, "§a[强制治愈]", "/ps debug cure");
+        sendClickableCommand(player, "§6[获取工具]", "/ps get GENETIC_LENS");
+        
+        player.sendMessage(Component.text("§8§m--------------------------------"));
+    }
+
+    private void sendClickableCommand(Player player, String text, String command) {
+        net.kyori.adventure.text.TextComponent msg = net.kyori.adventure.text.Component.text(text)
+            .clickEvent(net.kyori.adventure.text.event.ClickEvent.runCommand(command))
+            .hoverEvent(net.kyori.adventure.text.event.HoverEvent.showText(net.kyori.adventure.text.Component.text("§7点击执行: " + command)));
+        player.sendMessage(msg);
     }
 }
