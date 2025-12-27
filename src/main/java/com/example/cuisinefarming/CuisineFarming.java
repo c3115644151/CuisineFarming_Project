@@ -57,6 +57,11 @@ public class CuisineFarming extends JavaPlugin {
         new com.example.cuisinefarming.tasks.MonocleTask(this).runTaskTimer(this, 20L, 10L);
         new com.example.cuisinefarming.tasks.GrowthTask(this).runTaskTimer(this, 20L, 20L); // 1 second
         
+        // Load Cooking Pots
+        if (cookingManager != null) {
+            cookingManager.loadPots();
+        }
+
         getLogger().info("CuisineFarming has been enabled!");
     }
 
@@ -64,6 +69,9 @@ public class CuisineFarming extends JavaPlugin {
     public void onDisable() {
         if (fertilityManager != null) {
             fertilityManager.saveAll();
+        }
+        if (cookingManager != null) {
+            cookingManager.savePots();
         }
         getLogger().info("CuisineFarming has been disabled!");
     }

@@ -70,9 +70,19 @@ public class CookingPot {
         // 创建持久化 Inventory (54格)
         this.inventory = new CookingPotInventory(this).getInventory();
         
+        cleanupGhostVisuals(); // 清理可能的残留实体
         startVisualTask();
         startPhysicsTask();
         spawnInfoDisplay();
+    }
+
+    private void cleanupGhostVisuals() {
+        // 清理方块上方的残留 ItemDisplay
+        location.getWorld().getNearbyEntities(location.clone().add(0.5, 0.5, 0.5), 1.0, 1.0, 1.0).forEach(e -> {
+            if (e instanceof ItemDisplay) {
+                e.remove();
+            }
+        });
     }
 
     /**
@@ -173,6 +183,10 @@ public class CookingPot {
         // Open the persistent inventory
         player.openInventory(this.inventory);
     }
+    
+    public Inventory getInventory() {
+        return inventory;
+    }
 
     public List<ItemStack> getIngredients() {
         List<ItemStack> list = new ArrayList<>();
@@ -198,6 +212,7 @@ public class CookingPot {
         display.setTransformation(transform);
         
         display.setBillboard(Display.Billboard.FIXED); // 固定朝向，我们将手动旋转
+        display.setPersistent(false); // 不持久化，重启自动消失
         visualItems.add(display);
     }
 
@@ -516,9 +531,18 @@ public class CookingPot {
         }
 
         // 4. Update State
-        state = CookingState.FINISHED;
-        isHeated = false; // Stop heating
-        location.getWorld().playSound(location, Sound.BLOCK_NOTE_BLOCK_BELL, 1.0f, 1.0f); // Ding!
+        CookingRecipe nextMatch = plugin.getCookingManager().matchRecipe(getIngredients());
+        if (nextMatch != null) {
+            this.currentRecipe = nextMatch;
+            this.cookingTimer = 0;
+            this.perfectCookingTicks = 0;
+            this.state = CookingState.COOKING;
+            location.getWorld().playSound(location, Sound.BLOCK_BREWING_STAND_BREW, 1.0f, 1.0f);
+        } else {
+            state = CookingState.FINISHED;
+            isHeated = false; // Stop heating
+            location.getWorld().playSound(location, Sound.BLOCK_NOTE_BLOCK_BELL, 1.0f, 1.0f); // Ding!
+        }
         location.getWorld().spawnParticle(Particle.HAPPY_VILLAGER, location.clone().add(0.5, 1.0, 0.5), 10, 0.3, 0.3, 0.3, 0.05);
         
         // Optional: Play toast sound for high quality
@@ -640,9 +664,10 @@ public class CookingPot {
             // Already empty?
         }
         
-        // Reset to IDLE if empty
-        if (!hasIngredients() && (inventory.getItem(OUTPUT_SLOT) == null)) {
+        // Reset to IDLE if empty, or PREPARING if ingredients remain
+        if (inventory.getItem(OUTPUT_SLOT) == null) {
             state = CookingState.IDLE;
+            updateVisuals(); // Will transition to PREPARING if ingredients exist
         }
     }
 

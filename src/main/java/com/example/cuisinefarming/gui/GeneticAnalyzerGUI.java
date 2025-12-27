@@ -95,7 +95,33 @@ public class GeneticAnalyzerGUI implements InventoryHolder, Listener {
             case IDLE:
             default:
                 button = new ItemStack(Material.RED_STAINED_GLASS_PANE);
-                setMeta(button, "§c[等待输入] §7(Waiting for Input)", "§7请在左侧放入未鉴定种子或DNA样本");
+                
+                ItemStack input = inventory.getItem(SLOT_INPUT);
+                if (input != null && input.getType() != Material.AIR) {
+                    // Debug info
+                    String reason = "Unknown";
+                    if (!isValidInput(input)) {
+                         if (input.getType() == Material.FLINT) {
+                             Plugin ps = Bukkit.getPluginManager().getPlugin("PastureSong");
+                             if (ps == null) reason = "No PastureSong";
+                             else {
+                                 NamespacedKey key = new NamespacedKey(ps, "gene_identified");
+                                 ItemMeta m = input.getItemMeta();
+                                 if (m == null) reason = "No Meta";
+                                 else if (!m.getPersistentDataContainer().has(key, PersistentDataType.BYTE)) reason = "No NBT";
+                                 else {
+                                     Byte v = m.getPersistentDataContainer().get(key, PersistentDataType.BYTE);
+                                     reason = "ID Val: " + v;
+                                 }
+                             }
+                         } else {
+                             reason = "Not Seed/Sample";
+                         }
+                    }
+                    setMeta(button, "§c[无效输入] §7(Invalid Input)", "§7原因: " + reason, "§7请放入未鉴定种子或DNA样本");
+                } else {
+                    setMeta(button, "§c[等待输入] §7(Waiting for Input)", "§7请在左侧放入未鉴定种子或DNA样本");
+                }
                 break;
         }
         inventory.setItem(SLOT_BUTTON, button);
@@ -212,6 +238,8 @@ public class GeneticAnalyzerGUI implements InventoryHolder, Listener {
         }
         
         // Check 2: PastureSong DNA Sample
+        // Accept both Paper (Legacy/Docs) and Flint (Tool acting as container)
+        // We rely on NBT data presence
         if (isPastureSongSample(item)) {
              return isPastureSongUnidentified(item);
         }
@@ -220,13 +248,15 @@ public class GeneticAnalyzerGUI implements InventoryHolder, Listener {
     }
     
     private boolean isPastureSongSample(ItemStack item) {
-        if (item.getType() != Material.PAPER) return false;
+        // Removed Material.PAPER check to allow Flint (DNA Sampler) or other containers
         Plugin pastureSong = Bukkit.getPluginManager().getPlugin("PastureSong");
         if (pastureSong == null) return false;
         
+        // Check for gene_identified key (Standard for PastureSong gene carriers)
         NamespacedKey key = new NamespacedKey(pastureSong, "gene_identified");
-        if (item.getItemMeta() == null) return false;
-        return item.getItemMeta().getPersistentDataContainer().has(key, PersistentDataType.BYTE);
+        ItemMeta meta = item.getItemMeta();
+        if (meta == null) return false;
+        return meta.getPersistentDataContainer().has(key, PersistentDataType.BYTE);
     }
 
     private boolean isPastureSongUnidentified(ItemStack item) {

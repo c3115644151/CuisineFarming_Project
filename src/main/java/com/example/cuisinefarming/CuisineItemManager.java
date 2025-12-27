@@ -56,7 +56,7 @@ public class CuisineItemManager {
         registerFood("SPICY_CURRY", Material.MUSHROOM_STEW, "辛辣咖喱", 20204, 2, "§b异域风情", "§7辣得过瘾！", "§b效果: 抗火 (10分钟)");
 
         // Tier 3: 珍馐 (Delicacy) - 永久增益/特殊效果
-        registerFood("WISDOM_BROTH", Material.MUSHROOM_STEW, "智慧浓汤", 20301, 3, "§d传说料理", "§7据说能让人变聪明。", "§d效果: 获得经验值 (150XP)");
+        registerFood("WISDOM_BROTH", Material.MUSHROOM_STEW, "智慧浓汤", 20301, 3, "§d传说料理", "§7据说能让人变聪明。", "§d效果: 获得随机经验值");
         registerFood("ROYAL_FEAST", Material.CAKE, "皇家盛宴", 20302, 3, "§d传说料理", "§7足以招待国王的宴席。", "§d效果: 全员恢复 + 饱和 (范围光环)");
 
         plugin.getLogger().info("Registered " + customItems.size() + " cuisine items.");

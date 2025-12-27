@@ -1,10 +1,16 @@
 package com.example.cuisinefarming.cooking;
 
 import com.example.cuisinefarming.CuisineFarming;
+import org.bukkit.Location;
 import org.bukkit.Material;
+import org.bukkit.configuration.ConfigurationSection;
+import org.bukkit.configuration.file.YamlConfiguration;
 import org.bukkit.inventory.ItemStack;
 
+import java.io.File;
+import java.io.IOException;
 import java.util.*;
+import java.util.logging.Level;
 
 /**
  * 烹饪系统管理器
@@ -216,5 +222,103 @@ public class CookingManager {
         }
         
         return bestMatch;
+    }
+
+    // --- Cooking Pot Management ---
+    private final Map<Location, CookingPot> activePots = new HashMap<>();
+
+    public CookingPot getPot(Location location) {
+        return activePots.get(location);
+    }
+
+    public boolean hasPot(Location location) {
+        return activePots.containsKey(location);
+    }
+
+    public CookingPot createPot(Location location) {
+        CookingPot pot = new CookingPot(plugin, location);
+        activePots.put(location, pot);
+        return pot;
+    }
+
+    public void removePot(Location location) {
+        CookingPot pot = activePots.remove(location);
+        if (pot != null) {
+            pot.destroy();
+        }
+    }
+
+    public void savePots() {
+        File file = new File(plugin.getDataFolder(), "cooking_pots.yml");
+        YamlConfiguration config = new YamlConfiguration();
+        
+        int index = 0;
+        for (CookingPot pot : activePots.values()) {
+            String path = "pots." + index;
+            config.set(path + ".world", pot.getLocation().getWorld().getName());
+            config.set(path + ".x", pot.getLocation().getBlockX());
+            config.set(path + ".y", pot.getLocation().getBlockY());
+            config.set(path + ".z", pot.getLocation().getBlockZ());
+            
+            // Save Inventory
+            for (int i = 0; i < pot.getInventory().getSize(); i++) {
+                ItemStack item = pot.getInventory().getItem(i);
+                if (item != null && item.getType() != Material.AIR) {
+                    config.set(path + ".inventory." + i, item);
+                }
+            }
+            index++;
+        }
+        
+        try {
+            config.save(file);
+        } catch (IOException e) {
+            plugin.getLogger().log(Level.SEVERE, "Could not save cooking pots!", e);
+        }
+    }
+
+    public void loadPots() {
+        File file = new File(plugin.getDataFolder(), "cooking_pots.yml");
+        if (!file.exists()) return;
+        
+        YamlConfiguration config = YamlConfiguration.loadConfiguration(file);
+        ConfigurationSection potsSection = config.getConfigurationSection("pots");
+        if (potsSection == null) return;
+        
+        for (String key : potsSection.getKeys(false)) {
+            try {
+                String worldName = potsSection.getString(key + ".world");
+                int x = potsSection.getInt(key + ".x");
+                int y = potsSection.getInt(key + ".y");
+                int z = potsSection.getInt(key + ".z");
+                
+                org.bukkit.World world = org.bukkit.Bukkit.getWorld(worldName);
+                if (world == null) continue;
+                
+                Location loc = new Location(world, x, y, z);
+                // Verify it's still a cauldron
+                if (loc.getBlock().getType() != Material.CAULDRON && loc.getBlock().getType() != Material.WATER_CAULDRON) {
+                    continue; 
+                }
+                
+                CookingPot pot = createPot(loc);
+                
+                // Load Inventory
+                ConfigurationSection invSection = potsSection.getConfigurationSection(key + ".inventory");
+                if (invSection != null) {
+                    for (String slotStr : invSection.getKeys(false)) {
+                        int slot = Integer.parseInt(slotStr);
+                        ItemStack item = invSection.getItemStack(slotStr);
+                        pot.getInventory().setItem(slot, item);
+                    }
+                }
+                
+                // Refresh Visuals
+                pot.updateVisuals();
+                
+            } catch (Exception e) {
+                plugin.getLogger().warning("Failed to load a cooking pot: " + key);
+            }
+        }
     }
 }

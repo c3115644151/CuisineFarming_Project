@@ -155,25 +155,30 @@ public class GeneticsManager {
         // 2. 写入星级数据
         pdc.set(STAR_RATING_KEY, PersistentDataType.INTEGER, stars);
         
-        // 3. 更新显示 (Lore)
-        List<Component> lore = new ArrayList<>();
+        // 3. 更新显示 (Lore) - Align with PastureSong style
+        List<Component> lore = meta.lore();
+        if (lore == null) lore = new ArrayList<>();
         
-        // 构建星级条
-        StringBuilder starBuilder = new StringBuilder();
-        for (int i = 0; i < stars; i++) starBuilder.append("⭐");
-        starBuilder.append("§8");
-        for (int i = stars; i < 5; i++) starBuilder.append("⭐");
+        // 清除旧的星级Lore (如果存在)
+        // 简单策略: 清除第一行如果它看起来像星级
+        // 但这里我们假设是新生成的物品，或者完全覆盖
+        // 为了安全，我们直接添加到头部，或者重建Lore
         
-        lore.add(Component.text("§b品质: §e" + starBuilder.toString() + " §7(" + stars + "星)"));
-        lore.add(Component.text("§7[优质食材]")); // 标识这是食材而非种子
+        // PastureSong style: Gold color, Solid/Hollow stars
+        StringBuilder starStr = new StringBuilder("§6");
+        for (int i = 0; i < 5; i++) {
+            if (i < stars) starStr.append("★");
+            else starStr.append("☆");
+        }
+        
+        // Insert at top
+        if (!lore.isEmpty() && lore.get(0).toString().contains("★")) {
+             lore.set(0, Component.text(starStr.toString()));
+        } else {
+             lore.add(0, Component.text(starStr.toString()));
+        }
         
         meta.lore(lore);
-        
-        // 4. 更新名字 (可选，增加一点风味)
-        // 例如: "三星级 马铃薯"
-        // Component name = Component.text("§e" + stars + "星级 ").append(Component.translatable(item.getType().translationKey()));
-        // meta.displayName(name);
-        
         item.setItemMeta(meta);
     }
 
@@ -238,14 +243,23 @@ public class GeneticsManager {
         
         // 基因评级
         int totalStars = data.calculateStarRating();
-        StringBuilder starBuilder = new StringBuilder();
-        for (int i = 0; i < totalStars; i++) starBuilder.append("⭐");
-        starBuilder.append("§8");
-        for (int i = totalStars; i < 5; i++) starBuilder.append("⭐");
+        String colorCode = getQualityColorCode(totalStars);
+        
+        StringBuilder starBuilder = new StringBuilder(colorCode);
+        for (int i = 0; i < 5; i++) {
+            if (i < totalStars) starBuilder.append("★");
+            else starBuilder.append("☆");
+        }
         
         // [Modified] 统一显示：既显示星级(食材属性)也显示基因(种植属性)
         // 这里的 "品质" 兼容了食材星级显示，避免 lore 冲突
-        lore.add(Component.text("§b品质: §e" + starBuilder.toString() + " §7(" + totalStars + "星)"));
+        // 使用与 saveStarToItem 一致的星级显示，但保留 "品质:" 前缀? 
+        // 不，saveStarToItem 现在只显示星星。这里如果显示 "品质: ★★★☆☆" 也可以。
+        // 但为了统一，最好也只显示星星? 或者 saveStarToItem 也应该有 "品质:"?
+        // PastureSong (Meat) only shows stars. "★★★★★"
+        // Let's stick to PastureSong style: Just the stars line.
+        
+        lore.add(Component.text(starBuilder.toString()));
         
         // 遍历所有性状显示
         for (Trait trait : Trait.values()) {
@@ -322,6 +336,17 @@ public class GeneticsManager {
         
         lore.add(Component.text(String.format("  §f%s: %s%s §7(%s)", 
             trait.getName(), color, pair.getDisplayString(trait), desc)));
+    }
+    
+    private String getQualityColorCode(int stars) {
+        switch (stars) {
+            case 1: return "§a"; // Green
+            case 2: return "§b"; // Aqua
+            case 3: return "§d"; // Light Purple
+            case 4: return "§e"; // Yellow
+            case 5: return "§6"; // Gold
+            default: return "§f";
+        }
     }
     
     private String getTierColor(double val) {

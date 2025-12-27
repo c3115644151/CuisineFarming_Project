@@ -28,7 +28,7 @@ import org.bukkit.event.inventory.InventoryCloseEvent;
 public class CookingPotListener implements Listener {
 
     private final CuisineFarming plugin;
-    private final Map<Location, CookingPot> activePots = new HashMap<>();
+    // activePots moved to CookingManager
 
     public CookingPotListener(CuisineFarming plugin) {
         this.plugin = plugin;
@@ -63,7 +63,10 @@ public class CookingPotListener implements Listener {
         // Debug
         // player.sendMessage("Interact Cauldron!");
         
-        CookingPot pot = activePots.computeIfAbsent(loc, k -> new CookingPot(plugin, loc));
+        CookingPot pot = plugin.getCookingManager().getPot(loc);
+        if (pot == null) {
+            pot = plugin.getCookingManager().createPot(loc);
+        }
         
         boolean hasIngredients = pot.hasIngredients();
         boolean isCooking = pot.getState() == CookingPot.CookingState.COOKING;
@@ -149,9 +152,8 @@ public class CookingPotListener implements Listener {
     public void onBlockBreak(BlockBreakEvent event) {
         if (event.getBlock().getType() == Material.CAULDRON) {
             Location loc = event.getBlock().getLocation();
-            if (activePots.containsKey(loc)) {
-                activePots.get(loc).destroy();
-                activePots.remove(loc);
+            if (plugin.getCookingManager().hasPot(loc)) {
+                plugin.getCookingManager().removePot(loc);
                 event.getPlayer().sendMessage("§e[CookingPot] 烹饪锅已拆除。");
             }
         }
